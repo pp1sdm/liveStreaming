@@ -1,0 +1,2013 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>韩语答题 · 画面</title>
+<!--
+  OBS 浏览器源加载这个页面（http://127.0.0.1:7331/overlay）。
+
+  默认铺满韩纸底（米黄 + 极淡的点阵），整屏当背景用。
+
+  ?solid=0   关掉底色，改成透明，叠在摄像头上。
+  ?board=0   收起右边的排行榜，想全屏放摄像头的时候用。
+  ?sfx=0     关掉音效（默认开）。音效是装饰。
+  ?voice=0   关掉语音和字幕（默认开）。语音是内容，所以和 ?sfx 分开。
+  ?vol=0.72  音效音量，0～1.5。
+
+  音效全部由 Web Audio 现场合成，不加载任何音频文件，音高只用韩国传统的
+  계면조 五声音阶、乐器只用 사물놀이 四物——详见脚本里 SFX 那段。
+
+  语音（题干、讲解、串场）是另一回事：由服务端合成成 MP3 推下来，页面只播。
+  这里**不用 speechSynthesis**——OBS 的浏览器源是 CEF，getVoices() 永远返回
+  空数组，那套在直播里根本不响。详见脚本里 VOICE 那段。
+
+  关于默认值的由来：原来反着来——默认透明，?solid=1 才有底。但 OBS 的预览
+  把透明显示成黑色，于是同一套样式在 OBS 里和在浏览器里看着像两个东西，
+  很容易误判成「样式写错了」。现在两边默认就是同一个观感。
+
+  视觉是新粗野主义 + 오방색（五方色）：韩国传统的青赤黄白黑，本来就是一套
+  高饱和撞色，正好是新粗野主义要的东西。纯黑描边、无模糊硬阴影、实心色块。
+
+  字号统一用 vh，基准 1080p。在 OBS 里缩放素材时整套排版会等比跟着变。
+-->
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Noto+Sans+KR:wght@700;900&family=Noto+Sans+SC:wght@700;900&display=swap">
+<style>
+  :root {
+    /* 一个「设计单位」。16:9 时正好等于 1vh（1080p 下 10.8px），比 16:9 窄
+       就跟着宽度一起缩：0.5625vw = vw × 9/16，1920 宽时恰好也是 10.8px。
+       整套排版所有尺寸都挂在这个单位上，所以任何来源分辨率下都是等比的，
+       不会出现「字号按高度算、但宽度不够」导致的横向溢出。
+       （OBS 源设成 4:3 时踩过：题干按 vh 撑到 312px，可用宽只有 285px。） */
+    --u: min(1vh, 0.5625vw);
+    /* 오방색 · 五方色：青赤黄白黑。整套配色的地基。 */
+    --heuk:   #12100E;   /* 흑 黑 —— 描边、正文 */
+    --baek:   #FFFDF6;   /* 백 白 —— 卡片底 */
+    --hwang:  #FFCE00;   /* 황 黃 —— 题干、强调 */
+    --cheong: #1B5FA8;   /* 청 靑 —— 正确答案 */
+    --jeok:   #D8352A;   /* 적 赤 —— 紧急、封盘 */
+    --hanji:  #F3EADA;   /* 한지 韩纸 —— 米黄底 */
+    --muted:  #7A7266;
+    --shade:  #E7DDCB;
+
+    --line:   calc(.40 * var(--u)) solid var(--heuk);
+    --line-2: calc(.26 * var(--u)) solid var(--heuk);
+    --hard:   calc(.58 * var(--u)) calc(.58 * var(--u)) 0 var(--heuk);
+    --soft:   calc(.34 * var(--u)) calc(.34 * var(--u)) 0 var(--heuk);
+
+    --f:  'Noto Sans KR', 'Noto Sans SC', system-ui, -apple-system, sans-serif;
+    --fd: 'Archivo Black', 'Noto Sans KR', system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: transparent;
+    font-family: var(--f);
+    color: var(--heuk);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* 韩纸底：米黄 + 极淡的点阵，像宣纸的纹路。只在 solid 模式下铺。
+     点阵用 radial-gradient 画，不额外请求图片。 */
+  html.solid body {
+    background-color: var(--hanji);
+    background-image: radial-gradient(rgba(18,16,14,.055) calc(.13 * var(--u)), transparent 1.4px);
+    background-size: calc(3.2 * var(--u)) calc(3.2 * var(--u));
+  }
+
+  .stage {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    gap: 1.6vw;
+    padding: calc(3.4 * var(--u)) 3.2vw;
+  }
+  .main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: calc(2.2 * var(--u));
+  }
+
+  /* ---------- 题目 ---------- */
+  /* 题干是整屏最响的一块。黄底黑字在手机小屏上最抓眼。
+     阶段用底色说话：黄 → 红（催）→ 纸（封盘）→ 白（公布）。 */
+  .q {
+    position: relative;
+    background: var(--hwang);
+    border: var(--line);
+    box-shadow: var(--hard);
+    padding: calc(2.4 * var(--u)) 3vw;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: calc(1.2 * var(--u));
+    flex: none;
+    transition: background .22s;
+  }
+  .stage.urgent  .q { background: var(--jeok); color: var(--baek); }
+  .stage.locked  .q { background: var(--shade); }
+  .stage.revealed .q { background: var(--baek); }
+
+  .q-no {
+    display: flex;
+    align-items: center;
+    gap: calc(.8 * var(--u));
+    font-size: calc(1.7 * var(--u));
+    font-weight: 900;
+    letter-spacing: .12em;
+    flex: none;
+    padding: calc(.35 * var(--u)) calc(1.3 * var(--u));
+    background: var(--heuk);
+    color: var(--baek);
+  }
+  .q-no b {
+    font: 900 calc(2.1 * var(--u))/1 var(--fd);
+    font-variant-numeric: tabular-nums;
+    color: var(--hwang);
+  }
+  .stage.urgent .q-no b { color: var(--baek); }
+
+  /* 韩文是主角，字号按长度分档——`물` 这种一个字的词就该铺满整块。
+     keep-all 让韩文只在空格处断行，不在词中间劈开。 */
+  .q-prompt {
+    font-weight: 900;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+    text-align: center;
+    text-wrap: balance;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+    max-width: 100%;
+  }
+  /* 主列宽 72vw，1080p 下约 1380px，题干可用宽 1259px。按现在这套档，
+     题库里最长的一句（"저는 한국어를 공부해요."）占 701px，才 56%；
+     最长的选项占 48%。余量是故意留的——以后换题库、题干更长时不至于当场溢出。 */
+  .q-prompt.len-xs { font-size: calc(13.4 * var(--u)); }
+  .q-prompt.len-s  { font-size: calc(9.2 * var(--u)); }
+  .q-prompt.len-m  { font-size: calc(6.0 * var(--u)); }
+  .q-prompt.len-l  { font-size: calc(4.4 * var(--u)); }
+
+  /* ---------- 全场答题分布 ---------- */
+  /* 公布之后才出现。三条的**宽度按人数成比例**——人数少的时候画面上报的是
+     「3 人 / 7 人 / 12 人」，光看数字读不出比例，宽度补上这一眼。
+     换成百分比时宽度不变，因为比例本来就是同一份。 */
+  .dist {
+    display: flex;
+    width: 100%;
+    gap: calc(.7 * var(--u));
+    margin-top: calc(.8 * var(--u));
+  }
+  .dist .seg {
+    /* flex-grow 由 JS 按人数写。min-width 是地板：某一档只有一两个人时
+       别被挤成一条看不见的线，数字读不出来就白做了。 */
+    flex: 1 1 0;
+    min-width: calc(10 * var(--u));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: calc(.55 * var(--u)) calc(.5 * var(--u));
+    border: var(--line-2);
+    background: var(--baek);
+    /* 收答期间整条不显示，但**高度留着**。
+       原来是 `display: none`，量出来代价很具体：公布那一刻题干卡长高 78px，
+       整个选项网格跟着下移 79px、每格矮 39px，底栏也挪 15px——每道题跳两回
+       （公布时往下、换题时往上）。留着位置，题干卡在整道题里就是恒定高度。
+       用 `visibility` 而不是 `display`，正是因为它占位。
+       代价是公布前题干在卡片里会略偏上一点。比起整个画面往下蹦一下，
+       这点偏心不算什么。 */
+    visibility: hidden;
+  }
+  /* 入场动画挂在 `.on` 上而不是 `.seg` 上：类名一加动画才跑，一撤就没了，
+     所以每道题公布时都会重新落一次，不用 JS 手动重启动画。 */
+  .dist.on .seg {
+    visibility: visible;
+    animation: drop .3s cubic-bezier(.2,.9,.3,1) both;
+  }
+  .dist.on .seg:nth-child(2) { animation-delay: .06s; }
+  .dist.on .seg:nth-child(3) { animation-delay: .12s; }
+  .dist .seg .n {
+    font: 900 calc(2.5 * var(--u))/1 var(--fd);
+    font-variant-numeric: tabular-nums;
+  }
+  .dist .seg .k {
+    font-size: calc(1.35 * var(--u));
+    font-weight: 900;
+    letter-spacing: .1em;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .dist .seg .k i { font-style: normal; margin-left: calc(.5 * var(--u)); }
+  /* 答对用青、答错用赤——和选项、和榜上的卡片是同一套颜色，
+     换一个地方又换一套的话，这三个数就白做了。 */
+  .dist .seg.ok, .dist .seg.no { color: var(--baek); }
+  .dist .seg.ok { background: var(--cheong); }
+  .dist .seg.no { background: var(--jeok); }
+  .dist .seg.ok .k, .dist .seg.no .k { color: var(--baek); opacity: .9; }
+  /* 未作答是「没发生的事」，用最轻的一档，不跟答对答错抢眼。 */
+  .dist .seg.off { background: var(--shade); color: var(--muted); }
+
+  /* ---------- 落位的抢答卡片 ---------- */
+  /* 公布那一刻从下面的榜上飞进来。空着的时候整块不存在（见 `:empty`），
+     所以没公布时它一点都不占地方，选项里的字还是在正中间。 */
+  .opt .picks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: calc(.35 * var(--u)) .45vw;
+    pointer-events: none;
+  }
+  .opt .picks:empty { display: none; }
+  /* 尺寸和榜上那张完全一致，不是「差不多」——飞行时克隆体要按落点宽度
+     算缩放比（见 `flyOne`），两边只要差一点，卡片落地就会「啪」地弹一下。
+     一模一样的话缩放比正好是 1，落点是严丝合缝接上的。 */
+  .pick {
+    color: var(--heuk);
+    transition: opacity .14s;
+  }
+  /* 克隆体还在飞的时候，真卡片先别显形——落地那一刻才出现，
+     否则同一张卡片会在两个地方同时被看见。 */
+  .pick.waiting { opacity: 0; }
+
+  /* 飞行中的克隆体。fixed 定位是必须的：它要横跨底栏和选项区，
+     挂在任何一个容器里都会被那个容器的 overflow 裁掉。 */
+  .ghost {
+    position: fixed;
+    z-index: 900;
+    margin: 0;
+    box-shadow: var(--soft);
+    pointer-events: none;
+    will-change: transform;
+  }
+
+  /* ---------- 选项 ---------- */
+  .opts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-auto-rows: 1fr;
+    gap: calc(1.8 * var(--u)) 1.8vw;
+    flex: 1;
+    min-height: 0;
+  }
+  .opt {
+    position: relative;
+    overflow: hidden;
+    background: var(--baek);
+    border: var(--line);
+    box-shadow: var(--hard);
+    padding: calc(1.6 * var(--u)) 1.6vw;
+    /* 竖排：上面一行是字母 + 选项文字 + 票数，下面一行留给飞进来的抢答卡片。
+       排成竖排而不是把卡片绝对定位，是为了让卡片**真的占位**——绝对定位
+       得给底边常年留一条空白，没公布时那块空白就白留了。 */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: calc(.9 * var(--u));
+    transition: background .18s, opacity .22s, color .18s;
+  }
+  .opt .row {
+    display: flex;
+    align-items: center;
+    gap: 1.3vw;
+    min-width: 0;
+  }
+  .opt .letter {
+    flex: none;
+    width: calc(5.4 * var(--u));
+    height: calc(5.4 * var(--u));
+    display: grid;
+    place-items: center;
+    font: 900 calc(2.6 * var(--u))/1 var(--fd);
+    background: var(--heuk);
+    color: var(--baek);
+    transition: background .18s, color .18s;
+  }
+  /* 中文选项不设 keep-all——中文没空格，那样会整行断不开直接溢出。 */
+  .opt .text {
+    min-width: 0;
+    font-weight: 900;
+    line-height: 1.25;
+    text-wrap: balance;
+  }
+  .opt .text.len-s { font-size: calc(4.6 * var(--u)); }
+  .opt .text.len-m { font-size: calc(3.8 * var(--u)); }
+  .opt .text.len-l { font-size: calc(3.0 * var(--u)); }
+
+  /* 公布之后：正确项整块翻青，其余压暗退到后面去。
+     颜色之外还加一个 ✓ 角标——只靠颜色区分，色弱的人看不出来。 */
+  .stage.revealed .opt:not(.correct) { opacity: .34; }
+  .stage.revealed .opt.correct {
+    background: var(--cheong);
+    color: var(--baek);
+    animation: pop .34s cubic-bezier(.2,.9,.3,1.2);
+  }
+  .stage.revealed .opt.correct .letter {
+    background: var(--baek);
+    color: var(--cheong);
+  }
+  .stage.revealed .opt.correct::after {
+    content: '✓';
+    position: absolute;
+    top: calc(.6 * var(--u)); right: calc(1.2 * var(--u));
+    font: 900 calc(3.2 * var(--u))/1 var(--fd);
+    color: var(--hwang);
+  }
+  @keyframes pop {
+    0%   { transform: scale(1); }
+    42%  { transform: scale(1.035); }
+    100% { transform: scale(1); }
+  }
+
+  /* 票数条：只在公布后出现，收答期间亮出来等于让人抄。 */
+  .bar {
+    position: absolute;
+    left: 0; bottom: 0;
+    height: calc(.8 * var(--u));
+    background: var(--heuk);
+    width: 0;
+    transition: width .55s cubic-bezier(.2,.7,.3,1);
+  }
+  .stage.revealed .opt.correct .bar { background: var(--hwang); }
+  .votes {
+    margin-left: auto;
+    flex: none;
+    font: 900 calc(2.3 * var(--u))/1 var(--fd);
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    opacity: 0;
+    transition: opacity .3s;
+  }
+  .stage.revealed .votes { opacity: 1; }
+  .stage.revealed .opt.correct .votes { color: var(--hwang); }
+
+  /* ---------- 底栏 ---------- */
+  .bar-row {
+    display: flex;
+    align-items: stretch;
+    gap: 1.8vw;
+    flex: none;
+    height: calc(13 * var(--u));
+  }
+
+  /* 倒计时做成一块钟面：白盘 + 黑描边 + 黄色进度弧。 */
+  .ring {
+    position: relative;
+    width: calc(13 * var(--u)); height: calc(13 * var(--u));
+    flex: none;
+    filter: drop-shadow(calc(.5 * var(--u)) calc(.5 * var(--u)) 0 var(--heuk));
+  }
+  .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); display: block; }
+  .ring .track { fill: var(--baek); stroke: var(--heuk); stroke-width: 7; }
+  .ring .fill  { fill: none; stroke: var(--hwang); stroke-width: 7;
+                 transition: stroke .3s; }
+  /* 底色换成红之后，弧线得跟着走，不然红底红弧看不见。 */
+  .stage.urgent .ring .track { fill: var(--jeok); }
+  .stage.urgent .ring .fill  { stroke: var(--baek); }
+  .stage.locked .ring .fill, .stage.revealed .ring .fill { stroke: var(--muted); }
+  .ring .num {
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    font: 900 calc(3.8 * var(--u))/1 var(--fd);
+    font-variant-numeric: tabular-nums;
+  }
+  .stage.urgent .ring .num { color: var(--baek); }
+  .stage.locked .ring .num, .stage.revealed .ring .num { font-size: calc(2.2 * var(--u)); }
+
+  /* 最后十秒心跳一下。只动 transform，不动布局，OBS 里不吃性能。 */
+  @keyframes beat {
+    0%, 100% { transform: scale(1); }
+    50%      { transform: scale(1.14); }
+  }
+  .stage.urgent .ring .num { animation: beat .9s ease-in-out infinite; }
+
+  .stat {
+    background: var(--baek);
+    border: var(--line);
+    box-shadow: var(--hard);
+    padding: calc(1.6 * var(--u)) 1.8vw;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: calc(.2 * var(--u));
+    flex: none;
+    min-width: 12vw;
+  }
+  .stat .k { font-size: calc(1.6 * var(--u)); letter-spacing: .1em; color: var(--muted); font-weight: 900; }
+  .stat .k .ko { color: var(--heuk); margin-left: calc(.5 * var(--u)); }
+  .stat .v { font: 900 calc(3.6 * var(--u))/1 var(--fd); font-variant-numeric: tabular-nums; }
+
+  .ticker {
+    flex: 1;
+    min-width: 0;
+    background: var(--baek);
+    border: var(--line);
+    box-shadow: var(--hard);
+    padding: calc(1.4 * var(--u)) 1.6vw;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: calc(.8 * var(--u));
+    overflow: hidden;
+  }
+  /* 固定一行的高度：收答期间标题是空的，不占位的话内容会往上跳。 */
+  .ticker .head {
+    font-size: calc(1.6 * var(--u)); letter-spacing: .12em; color: var(--muted); font-weight: 900;
+    line-height: 1.2; min-height: calc(1.95 * var(--u));
+  }
+  .ticker .head .ko { color: var(--heuk); }
+  .ticks { display: flex; flex-wrap: wrap; gap: calc(.8 * var(--u)) .8vw; align-content: flex-start; }
+  /* 榜上的卡片和落进选项里的那张**是同一个东西**，样式写在一块儿。
+     分开写迟早会漂移，一漂移飞行就对不上了——见 `.pick` 那段。 */
+  .tick, .pick {
+    font-size: calc(2.1 * var(--u));
+    font-weight: 900;
+    padding: calc(.35 * var(--u)) calc(1 * var(--u));
+    background: var(--shade);
+    border: var(--line-2);
+    white-space: nowrap;
+  }
+  /* 名次。榜是「最先答的十个」，所以名次不是装饰，是这张榜的全部内容——
+     没有它，十张卡片只是一堆名字。卡片飞进选项之后名次照样留着：
+     一眼能看出「最先答的三个全对」，这正是抢答榜想说的话。 */
+  .tick .r, .pick .r {
+    display: inline-grid;
+    place-items: center;
+    min-width: calc(2 * var(--u));
+    height: calc(2 * var(--u));
+    margin-right: calc(.6 * var(--u));
+    font: 900 calc(1.35 * var(--u))/1 var(--fd);
+    font-variant-numeric: tabular-nums;
+    background: var(--heuk);
+    color: var(--hwang);
+    vertical-align: middle;
+  }
+  .tick .c { margin-left: calc(.5 * var(--u)); font-variant-numeric: tabular-nums; }
+  .tick.ok, .pick.ok { background: var(--cheong); color: var(--baek); }
+  .tick.no, .pick.no { background: var(--jeok); color: var(--baek); }
+  .tick.ok .r, .pick.ok .r { background: var(--baek); color: var(--cheong); }
+  .tick.no .r, .pick.no .r { background: var(--baek); color: var(--jeok); }
+
+  /* 空着的时候放号召——这是直播间最该被看见的一句话，所以做得比别处响。 */
+  .cta {
+    display: flex;
+    align-items: center;
+    gap: 1vw;
+    font-size: calc(2.4 * var(--u));
+    font-weight: 900;
+  }
+  .cta .keys { display: flex; gap: .5vw; }
+  .cta .keys b {
+    display: grid;
+    place-items: center;
+    width: calc(3.4 * var(--u)); height: calc(3.4 * var(--u));
+    font: 900 calc(2 * var(--u))/1 var(--fd);
+    background: var(--heuk);
+    color: var(--hwang);
+    animation: beckon 2.4s ease-in-out infinite;
+  }
+  .cta .keys b:nth-child(2) { animation-delay: .12s; }
+  .cta .keys b:nth-child(3) { animation-delay: .24s; }
+  .cta .keys b:nth-child(4) { animation-delay: .36s; }
+  /* 轻轻点一下头，够注意到就行，别做成闪烁。 */
+  @keyframes beckon {
+    0%, 62%, 100% { transform: none; }
+    72%           { transform: translateY(calc(-.5 * var(--u))); }
+  }
+
+  /* ---------- 排行榜 ---------- */
+  .board {
+    flex: none;
+    width: 20vw;
+    background: var(--baek);
+    border: var(--line);
+    box-shadow: var(--hard);
+    padding: calc(2 * var(--u)) 1.3vw;
+    display: flex;
+    flex-direction: column;
+    gap: calc(1.4 * var(--u));
+    overflow: hidden;
+  }
+  html.noboard .board { display: none; }
+
+  .board-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1vw;
+    flex: none;
+    padding-bottom: calc(1 * var(--u));
+    border-bottom: var(--line-2);
+  }
+  .board-head .t { font-size: calc(2 * var(--u)); font-weight: 900; letter-spacing: .08em; }
+  .board-head .t .ko { font-size: calc(1.6 * var(--u)); color: var(--muted); margin-left: calc(.6 * var(--u)); }
+  .board-head .n { font-size: calc(1.6 * var(--u)); color: var(--muted); font-weight: 900; }
+
+  .rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: calc(.9 * var(--u));
+    flex: none;
+  }
+  /* **每条选择器都带 `.rows` 前缀，不是啰嗦，是必需的。**
+     这里原来写的是裸的 `.row`，选项里那行「字母 + 文字 + 票数」也用了
+     `class="row"`（见 `buildOptions`），于是排行榜的米黄底、黑细边、内边距
+     整个糊到了选项上——白卡片里套了个米黄小卡片，看着像做错了层级。
+     组件自己的类名就该待在组件自己的容器里。 */
+  .rows .row {
+    display: flex;
+    align-items: center;
+    gap: .7vw;
+    padding: calc(.8 * var(--u)) .7vw;
+    background: var(--shade);
+    border: var(--line-2);
+    transition: background .3s;
+  }
+  /* 本轮得分的人整行转黄，一眼看到自己动了没有。 */
+  .rows .row.hot {
+    background: var(--hwang);
+    animation: flash .5s ease-out;
+  }
+  @keyframes flash {
+    0%   { transform: translateX(calc(-1.2 * var(--u))); }
+    100% { transform: none; }
+  }
+  .rows .row .rk {
+    flex: none;
+    width: calc(3.4 * var(--u)); height: calc(3.4 * var(--u));
+    display: grid; place-items: center;
+    font: 900 calc(1.9 * var(--u))/1 var(--fd);
+    background: var(--baek);
+    border: var(--line-2);
+    font-variant-numeric: tabular-nums;
+  }
+  /* 前三名用五方色点出来：金 → 银 → 铜。 */
+  .rows .row[data-rank="1"] .rk { background: var(--hwang); }
+  .rows .row[data-rank="2"] .rk { background: #C9D0DA; }
+  .rows .row[data-rank="3"] .rk { background: #DFA272; }
+  .rows .row .nm {
+    flex: 1;
+    min-width: 0;
+    font-size: calc(2.1 * var(--u));
+    font-weight: 900;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .rows .row .fire { flex: none; font-size: calc(1.7 * var(--u)); font-weight: 900;
+               font-variant-numeric: tabular-nums; }
+  .rows .row .sc { flex: none; font: 900 calc(2.3 * var(--u))/1 var(--fd); font-variant-numeric: tabular-nums; }
+  .rows .row .gain { flex: none; font-size: calc(1.7 * var(--u)); font-weight: 900;
+               color: var(--cheong); font-variant-numeric: tabular-nums; }
+  .rows .row.hot .gain { color: var(--heuk); }
+  .empty { font-size: calc(1.9 * var(--u)); color: var(--muted); padding: calc(1.4 * var(--u)) 0; line-height: 1.5; font-weight: 700; }
+
+  .round-head {
+    font-size: calc(1.6 * var(--u)); letter-spacing: .12em; color: var(--muted); font-weight: 900;
+    flex: none;
+    padding-top: calc(1 * var(--u));
+    border-top: var(--line-2);
+  }
+  .round-head .ko { color: var(--heuk); }
+  .gains {
+    list-style: none; margin: 0; padding: 0;
+    display: flex; flex-direction: column; gap: calc(.7 * var(--u));
+    overflow: hidden;
+  }
+  .gains li { display: flex; align-items: baseline; gap: .6vw; font-size: calc(1.9 * var(--u)); font-weight: 900; }
+  .gains .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gains .tag { flex: none; font-size: calc(1.5 * var(--u)); color: var(--muted); font-weight: 700; }
+  .gains .pt { flex: none; color: var(--cheong); font: 900 calc(2 * var(--u))/1 var(--fd); font-variant-numeric: tabular-nums; }
+
+  /* ---------- 状态提示 ---------- */
+  .banner {
+    position: fixed;
+    top: calc(1.6 * var(--u)); left: 50%;
+    background: var(--heuk);
+    color: var(--baek);
+    border: var(--line);
+    box-shadow: var(--soft);
+    padding: calc(.9 * var(--u)) calc(2.4 * var(--u));
+    font-size: calc(2 * var(--u));
+    font-weight: 900;
+    letter-spacing: .04em;
+    transform: translateX(-50%);
+    animation: drop-in .28s cubic-bezier(.2,.9,.3,1.2);
+  }
+  @keyframes drop-in {
+    0%   { transform: translate(-50%, calc(-1.6 * var(--u))); opacity: 0; }
+    100% { transform: translate(-50%, 0); opacity: 1; }
+  }
+  .banner[hidden] { display: none; animation: none; }
+  .banner.off { background: var(--jeok); }
+
+  /* 连对的庆祝条。只在有人连对到 3 题以上时出现。 */
+  .cheer {
+    position: fixed;
+    bottom: calc(2.4 * var(--u)); left: 50%;
+    background: var(--hwang);
+    border: var(--line);
+    box-shadow: var(--hard);
+    padding: calc(1.1 * var(--u)) calc(3.2 * var(--u));
+    font-size: calc(2.6 * var(--u));
+    font-weight: 900;
+    letter-spacing: .02em;
+    white-space: nowrap;
+    transform: translateX(-50%);
+    animation: cheer-in .4s cubic-bezier(.2,1.3,.4,1);
+    transition: bottom .3s;
+  }
+  @keyframes cheer-in {
+    0%   { transform: translate(-50%, calc(2.4 * var(--u))) scale(.9); opacity: 0; }
+    100% { transform: translate(-50%, 0) scale(1); opacity: 1; }
+  }
+  .cheer[hidden] { display: none; animation: none; }
+
+  /* ---------- 语音字幕 ---------- */
+  /* AI 在说话时底部的一条。语音是内容，字幕是它的文字影子——所以做得稳，
+     不做花活：黑底白字、五方色的黄方块当「正在说」的信号，只淡入淡出。
+     字体沿用 --f：栈里 Noto Sans KR 在头里，韩文走它，中文落到后面的
+     Noto Sans SC，中韩混排一整句两边都不缺字。
+     max-width 收在 60vw、正中——左边那圈倒计时在 11vw 以内，字幕够不着它。 */
+  .say {
+    position: fixed;
+    left: 50%;
+    bottom: calc(1.8 * var(--u));
+    max-width: 60vw;
+    background: var(--heuk);
+    color: var(--baek);
+    border: var(--line);
+    box-shadow: var(--hard);
+    padding: calc(1 * var(--u)) calc(2.2 * var(--u));
+    display: flex;
+    align-items: center;
+    gap: calc(1.1 * var(--u));
+    pointer-events: none;   /* 盖在画面上，但不挡底下的交互 */
+    opacity: 0;
+    visibility: hidden;
+    transform: translate(-50%, calc(1.2 * var(--u)));
+    transition: opacity .3s, transform .3s, visibility .3s;
+  }
+  .say.on { opacity: 1; visibility: visible; transform: translateX(-50%); }
+  .say .dot {
+    flex: none;
+    width: calc(1.5 * var(--u)); height: calc(1.5 * var(--u));
+    background: var(--hwang);
+    animation: beat 1.1s ease-in-out infinite;
+  }
+  .say .say-text {
+    min-width: 0;
+    font-size: calc(2.6 * var(--u));
+    font-weight: 900;
+    line-height: 1.3;
+    letter-spacing: .01em;
+    text-wrap: balance;
+  }
+  /* 字幕和庆祝条都固定在底部中间，同时出现会叠在一起——字幕一上来就把
+     庆祝条抬到它头顶。用兄弟选择器而不是 :has()：CEF 的版本不一定支持后者。 */
+  .say.on ~ .cheer { bottom: calc(9.6 * var(--u)); }
+
+  /* 音效没起来时的提示。只在真的没响起来时出现——平时画面上一个字都不多。
+     放左下角：横幅在顶部中间、庆祝条在底部中间，这里不会撞。 */
+  .sfx-warn {
+    position: fixed;
+    left: calc(2.4 * var(--u)); bottom: calc(2.4 * var(--u));
+    background: var(--jeok);
+    color: var(--baek);
+    border: var(--line);
+    box-shadow: var(--soft);
+    padding: calc(.7 * var(--u)) calc(1.8 * var(--u));
+    font-size: calc(1.8 * var(--u));
+    font-weight: 900;
+    letter-spacing: .04em;
+    animation: warn-in .28s cubic-bezier(.2,.9,.3,1.2);
+  }
+  @keyframes warn-in {
+    0%   { transform: translateY(calc(1.2 * var(--u))); opacity: 0; }
+    100% { transform: none; opacity: 1; }
+  }
+  .sfx-warn[hidden] { display: none; animation: none; }
+
+  /* ---------- 换题入场 ---------- */
+  /* 题干像盖章一样砸下来，四个选项随后逐块落位。
+     只动 transform / opacity，走合成层，OBS 里不掉帧。 */
+  .stage.enter .q { animation: slam .42s cubic-bezier(.2,.9,.3,1.15) both; }
+  @keyframes slam {
+    0%   { transform: scale(1.12) rotate(-1.1deg); opacity: 0; }
+    100% { transform: none; opacity: 1; }
+  }
+  .stage.enter .opt { animation: drop .32s cubic-bezier(.2,.9,.3,1) both; }
+  .stage.enter .opt:nth-child(1) { animation-delay: .10s; }
+  .stage.enter .opt:nth-child(2) { animation-delay: .16s; }
+  .stage.enter .opt:nth-child(3) { animation-delay: .22s; }
+  .stage.enter .opt:nth-child(4) { animation-delay: .28s; }
+  @keyframes drop {
+    0%   { transform: translateY(calc(-1.8 * var(--u))); opacity: 0; }
+    100% { transform: none; opacity: 1; }
+  }
+  .stage.enter .bar-row { animation: drop .32s cubic-bezier(.2,.9,.3,1) .34s both; }
+
+  /* 滚动条上的名字一条条滑进来。 */
+  .tick { animation: slide .26s cubic-bezier(.2,.9,.3,1) both; }
+  .tick:nth-child(2) { animation-delay: .04s; }
+  .tick:nth-child(3) { animation-delay: .08s; }
+  .tick:nth-child(4) { animation-delay: .12s; }
+  @keyframes slide {
+    from { transform: translateX(calc(-1.4 * var(--u))); opacity: 0; }
+    to   { transform: none; opacity: 1; }
+  }
+
+  /* 排行榜只在极端窄的比例下才收起来。
+     这套尺寸全都挂在 --u 上，比例一窄整套跟着缩，所以 4:3 也摆得下——
+     原来 4:3 就藏，结果 OBS 源设成 4:3 时排行榜静悄悄没了，是最难查的那种。
+     真要收，也得等到比 5:4 还瘦。 */
+  @media (max-aspect-ratio: 5/4) {
+    .board { display: none; }
+  }
+
+  /* 系统里关了动效就全停。倒计时的心跳和号召的点头都在这一类里。 */
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+
+  <div class="main">
+
+    <section class="q">
+      <div class="q-no">第 <b id="qidx">1</b> / <span id="qtotal">1</span> 题</div>
+      <div class="q-prompt" id="prompt">正在连接…</div>
+      <!-- 全场答题分布。公布之前整块不出现——答对率本身就是答案的强提示。 -->
+      <div class="dist" id="dist">
+        <div class="seg ok"  id="distok"><b class="n">0</b><span class="k">答对<i>정답</i></span></div>
+        <div class="seg no"  id="distno"><b class="n">0</b><span class="k">答错<i>오답</i></span></div>
+        <div class="seg off" id="distoff"><b class="n">0</b><span class="k">未作答<i>미응답</i></span></div>
+      </div>
+    </section>
+
+    <section class="opts" id="opts"></section>
+
+    <section class="bar-row">
+      <div class="ring">
+        <svg viewBox="0 0 120 120" aria-hidden="true">
+          <circle class="track" cx="60" cy="60" r="54"></circle>
+          <circle class="fill" id="ringfill" cx="60" cy="60" r="54"></circle>
+        </svg>
+        <div class="num" id="countdown">--</div>
+      </div>
+
+      <div class="stat">
+        <div class="k"><span id="statzh">已作答</span> <span class="ko" id="statko">답변</span></div>
+        <div class="v" id="statv">0</div>
+      </div>
+
+      <div class="ticker">
+        <div class="head" id="tickhead"></div>
+        <div class="ticks" id="ticks"></div>
+      </div>
+    </section>
+
+  </div>
+
+  <aside class="board">
+    <div class="board-head">
+      <span class="t">排行榜<span class="ko">순위</span></span>
+      <span class="n" id="boardn">还没有人上榜</span>
+    </div>
+    <ol class="rows" id="rows"></ol>
+    <div class="round-head">本轮得分 <span class="ko">이번 문제</span></div>
+    <ul class="gains" id="gains"></ul>
+  </aside>
+
+</div>
+
+<div class="banner" id="banner" hidden></div>
+<!-- 字幕条排在 .cheer 前面：右边那条 CSS 靠「兄弟」把庆祝条抬起来。 -->
+<div class="say" id="say">
+  <span class="dot" aria-hidden="true"></span>
+  <span class="say-text" id="saytext"></span>
+</div>
+<div class="cheer" id="cheer" hidden></div>
+<div class="sfx-warn" id="sfxwarn" hidden>音效没起来 · 소리 꺼짐</div>
+<!-- 语音只走服务端合成好的 MP3，不碰 speechSynthesis（CEF 里那套不响）。 -->
+<audio id="voice" preload="auto"></audio>
+
+<script>
+(function () {
+  'use strict';
+
+  var params = new URLSearchParams(location.search);
+  // 米黄底是默认，只有显式写了 ?solid=0 才关掉。
+  if (params.get('solid') !== '0') document.documentElement.classList.add('solid');
+  if (params.get('board') === '0') document.documentElement.classList.add('noboard');
+
+  var CIRC = 2 * Math.PI * 54;   // 环形周长，和 SVG 里的 r 对应
+  var ringFill = document.getElementById('ringfill');
+  ringFill.style.strokeDasharray = CIRC;
+
+  /** 倒计时进入这个秒数就开始催。 */
+  var URGENT_SECS = 10;
+
+  var stage    = document.getElementById('stage');
+  var elQidx   = document.getElementById('qidx');
+  var elQtotal = document.getElementById('qtotal');
+  var elPrompt = document.getElementById('prompt');
+  var elOpts   = document.getElementById('opts');
+  var elCd     = document.getElementById('countdown');
+  var elStatZh = document.getElementById('statzh');
+  var elStatKo = document.getElementById('statko');
+  var elStatV  = document.getElementById('statv');
+  var elTicks  = document.getElementById('ticks');
+  var elTickHd = document.getElementById('tickhead');
+  var elBanner = document.getElementById('banner');
+  var elCheer  = document.getElementById('cheer');
+  var elRows   = document.getElementById('rows');
+  var elBoardN = document.getElementById('boardn');
+  var elGains  = document.getElementById('gains');
+  var elWarn   = document.getElementById('sfxwarn');
+  var elSay    = document.getElementById('say');
+  var elSayTxt = document.getElementById('saytext');
+  var elVoice  = document.getElementById('voice');
+  var elDist   = document.getElementById('dist');
+  var elDistOk = document.getElementById('distok');
+  var elDistNo = document.getElementById('distno');
+  var elDistOff= document.getElementById('distoff');
+
+  // ==================== 音效 ====================
+  //
+  // 全部现场合成，一个音频文件都不加载。三个理由：
+  //   1) 页面是 include_str! 编进二进制的，再挂一套 mp3 就多一份要管的东西；
+  //   2) 오방색 + 韩纸 这套视觉是"手作"的调子，采样包里的通用音效一耳朵出戏；
+  //   3) 合成器能跟着画面走——音高按五声音阶现算，和排版共用同一套秩序。
+  //
+  // 音高只用韩国传统的 계면조（界面调）五声音阶：0 3 5 7 10 个半音，
+  // 也就是 A C D E G。乐器只用 사물놀이（四物游戏）里的四件，正好对上四色：
+  //
+  //   북     鼓     换题、封盘的骨点       ↔  흑 黑
+  //   징     大锣   公布答案的那一下       ↔  백 白
+  //   꽹과리 小锣   最后十秒的催           ↔  적 赤
+  //   가야금 伽倻琴 选项落位、有人作答     ↔  청 靑
+  //
+  // 一套音阶、四件乐器、四色。这就是"一体化"落到代码上的样子。
+  var SFX = (function () {
+    'use strict';
+
+    var enabled = params.get('sfx') !== '0';
+    var volRaw = parseFloat(params.get('vol'));
+    var VOL = isNaN(volRaw) ? 0.72 : Math.max(0, Math.min(1.5, volRaw));
+    // 语音在说话时音效让到多低。0.25 是"还听得见、但不抢话"的位置：
+    // 再低就成了背景噪声，语音一停的恢复反而像突然响了一下。
+    var DUCK = 0.25;
+
+    var ctx = null, bus = null;
+    // 主输出。提到外面来是因为 duck() 要够得着它——语音和音效撞车时靠它让路。
+    var master = null;
+    var ducked = false;
+
+    // 계면조：0 3 5 7 10 个半音。整个页面只有这一个音阶。
+    var SEMI = [0, 3, 5, 7, 10];
+    var ROOT = 220;                  // A3
+
+    // 锣的分音。真实锣的分音不成谐波关系，这一组比例是照着"金属片振动"
+    // 的感觉挑的：越往上越密、越不整。
+    var R_JING = [1, 2.41, 4.13, 6.79, 9.94];   // 징：低沉、拖得长
+    var R_KK   = [1, 3.02, 5.71, 9.13];         // 꽹과리：尖、短
+    var R_TICK = [1, 3.02];                     // 催秒用的，只要两片，省得烦
+
+    var answerStep = 0;    // 作答声轮流踩五声音阶
+    var lastAnswer = -1;   // 上一次作答声的时刻，用来压密度
+
+    /** 五声音阶上第 step 级（可正可负、可越八度）的频率。 */
+    function hz(step) {
+      var oct = Math.floor(step / 5);
+      return ROOT * Math.pow(2, (SEMI[step - oct * 5] + 12 * oct) / 12);
+    }
+
+    /** 一段噪声。`shape` 越大衰减越陡——用来做击打的那一下。 */
+    function noise(len, shape) {
+      var n = Math.max(2, Math.round(len));
+      var buf = ctx.createBuffer(1, n, ctx.sampleRate);
+      var d = buf.getChannelData(0);
+      for (var i = 0; i < n; i++) {
+        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, shape);
+      }
+      return buf;
+    }
+
+    /** 指数包络。起手用 0.0001 而不是 0——exponentialRamp 到不了 0。 */
+    function env(g, t, a, d, peak) {
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(Math.max(peak, 0.0002), t + a);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + a + d);
+    }
+
+    // ---- 가야금 伽倻琴：Karplus-Strong ----
+    //
+    // 一段噪声当激励，绕一圈"延迟 → 低通 → 反馈"就成了一条弦。延迟的长度
+    // 决定音高，反馈量决定余韵长短。
+    //
+    // **但这条弦是算成 PCM 再播的，不是在 Web Audio 的图里搭出来的。**
+    // 在音频图里搭反馈环有两个坑，都会真的踩到：
+    //
+    //   1) 环里的 DelayNode 有一整个渲染量子（128 样点）的最小延迟，
+    //      48000/128 = 375Hz 就是天花板。step 8 要 659Hz，会被硬压到 375。
+    //   2) 环路增益得自己保证小于 1。用 biquad 做环里的低通，它在截止频率
+    //      附近隆起 1.15 倍，正好罩住第 5 次谐波——环路增益 1.13，弦会指数
+    //      发散（实测：一秒内涨到 1e9）。
+    //
+    // 算成 PCM 两个坑都没了：没有环，音高就是 SR/N，想多高多高；衰减用一阶
+    // 低通（幅频响应处处 ≤ 1，环路增益必然小于 1），而且衰减时长事前就能验。
+    var STRINGS = {};
+
+    /** 算一条弦的 PCM。同一条弦只算一次，之后从缓存拿。 */
+    function stringPCM(step, dur, bright) {
+      var key = step + ':' + dur + ':' + bright;
+      if (STRINGS[key]) return STRINGS[key];
+
+      var sr = ctx.sampleRate;
+      var freq = hz(step);
+      if (freq < 40 || freq > sr * 0.4) return null;   // 超出这个音阶的调用范围
+      var len = Math.round(sr * dur);
+      var y = new Float32Array(len);
+
+      var fc = Math.min(sr * 0.45, freq * bright);
+      var a = 1 - Math.exp(-2 * Math.PI * fc / sr);
+      var w = 2 * Math.PI * freq / sr;
+
+      // 环里那个一阶低通自己有相位延迟，等于把环路拖长了一点点，音会整体
+      // 偏低。先把这段补掉，环路在目标频率上的总相位才正好是 2π 的整数倍。
+      // （不补的话每个音低 30～50 音分，整条音阶都是走音的。）
+      var phi = Math.atan2((1 - a) * Math.sin(w), 1 - (1 - a) * Math.cos(w));
+      var D = sr / freq - phi / w;        // 小数延迟，未必是整数个样点
+
+      // 反馈量：环路每绕一圈的总衰减 = 反馈量 × 低通在该频率上的增益。
+      // 低通增益是死数（一阶，下面直接算），所以反馈量要除掉它——这样
+      // dur 才真的是"dur 秒之后落到 -60dB"，而不是比标称短一大截。
+      var re = 1 - (1 - a) * Math.cos(w);
+      var im = (1 - a) * Math.sin(w);
+      var hmag = a / Math.sqrt(re * re + im * im);
+      var g = Math.min(0.9995, Math.pow(0.001, 1 / (freq * dur)) / hmag);
+
+      // 激励：一个周期噪声过一遍一阶低通。纯白噪声拨出来太"嘶"。
+      var span = Math.max(2, Math.ceil(D));
+      var p = 0;
+      for (var i = 0; i < span && i < len; i++) {
+        p = p * 0.42 + (Math.random() * 2 - 1) * 0.58;
+        y[i] = p;
+      }
+
+      var lp = 0;
+      for (var n = span; n < len; n++) {
+        // 小数延迟靠线性插值补。权重写反的话延迟会差 2×frac 个样点，
+        // 高音上就是二三十音分——实测过，是那种"说不上哪不对但就是不对"
+        // 的走音。
+        var idx = n - D;
+        var k = Math.floor(idx);
+        var fr = idx - k;
+        var v = (k >= 0 ? y[k] : 0) * (1 - fr) + (k + 1 < len ? y[k + 1] : 0) * fr;
+        lp += a * (v * g - lp);           // 一阶低通
+        y[n] = lp;
+      }
+
+      // 尾巴上 50ms 淡掉，否则 buffer 播完会"啪"一声。
+      var fade = Math.min(len >> 1, Math.round(sr * 0.05));
+      for (var k = 0; k < fade; k++) y[len - 1 - k] *= k / fade;
+
+      // 归一化：每条弦都顶到 1，响度就只由 gain 说了算，和音高无关。
+      var peak = 0;
+      for (var m = 0; m < len; m++) {
+        var v = y[m] < 0 ? -y[m] : y[m];
+        if (v > peak) peak = v;
+      }
+      if (peak > 0) for (var q = 0; q < len; q++) y[q] /= peak;
+
+      var buf = ctx.createBuffer(1, len, sr);
+      buf.getChannelData(0).set(y);
+      STRINGS[key] = buf;
+      return buf;
+    }
+
+    function pluck(step, t, dur, gain, bright) {
+      var buf = stringPCM(step, dur, bright || 7);
+      if (!buf) return;
+      var src = ctx.createBufferSource();
+      src.buffer = buf;
+      var g = ctx.createGain();
+      // 4ms 淡入，抹掉 buffer 第一个样点的"咔"。尾巴靠 buffer 自己的衰减，
+      // 不再叠包络——那会把弦的余韵又砍一刀。
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(Math.max(gain, 0.0002), t + 0.004);
+      src.connect(g); g.connect(bus);
+      src.start(t);
+    }
+
+    // ---- 북 鼓：皮面的低音，加一击 ----
+    function buk(t, gain, base, dur) {
+      var o = ctx.createOscillator();
+      o.type = 'sine';
+      // 起手高、飞快落下来，就是"咚"的那一下。
+      o.frequency.setValueAtTime(base * 2.1, t);
+      o.frequency.exponentialRampToValueAtTime(base, t + 0.075);
+      var g = ctx.createGain();
+      env(g, t, 0.002, dur, gain);
+      o.connect(g); g.connect(bus);
+      o.start(t); o.stop(t + dur + 0.15);
+
+      var src = ctx.createBufferSource();
+      src.buffer = noise(ctx.sampleRate * 0.05, 2.5);
+      var lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass'; lp.frequency.value = 700;
+      var ng = ctx.createGain(); ng.gain.value = gain * 0.5;
+      src.connect(lp); lp.connect(ng); ng.connect(bus);
+      src.start(t);
+    }
+
+    // ---- 锣的一族：징 / 꽹과리 ----
+    // 几个不成谐波关系的分音叠起来，每个再拆成两个微失谐的振荡器——
+    // 金属的"嗡"就是这两个频率拍出来的，单摆一个正弦只会像电子音。
+    function metal(base, ratios, t, dur, gain, noiseHz) {
+      for (var i = 0; i < ratios.length; i++) {
+        var f = base * ratios[i];
+        if (f > ctx.sampleRate * 0.44) continue;    // 超过奈奎斯特就别要了
+        var pd = dur * Math.pow(0.5, i);            // 高次分音衰减快得多
+        var pg = gain * Math.pow(0.6, i) * 0.55;
+        for (var k = 0; k < 2; k++) {
+          var o = ctx.createOscillator();
+          o.type = 'sine';
+          o.frequency.value = f * (k ? 1.005 : 0.995);
+          var g = ctx.createGain();
+          env(g, t, 0.004 + i * 0.003, pd, pg);
+          o.connect(g); g.connect(bus);
+          o.start(t); o.stop(t + pd + 0.3);
+        }
+      }
+      // 敲上去的那声脆响。
+      var src = ctx.createBufferSource();
+      src.buffer = noise(ctx.sampleRate * 0.06, 3);
+      var hp = ctx.createBiquadFilter();
+      hp.type = 'highpass'; hp.frequency.value = noiseHz;
+      var ng = ctx.createGain(); ng.gain.value = gain * 0.8;
+      src.connect(hp); hp.connect(ng); ng.connect(bus);
+      src.start(t);
+    }
+    function jing(t, gain, base, dur) { metal(base, R_JING, t, dur, gain, 1400); }
+    function kk(t, gain, base, dur)   { metal(base, R_KK,   t, dur, gain, 3000); }
+
+    /** 一段指数衰减的噪声当混响脉冲。有了它锣才是"在院子里响"。 */
+    function makeIR(seconds, decay) {
+      var sr = ctx.sampleRate;
+      var n = Math.round(sr * seconds);
+      var buf = ctx.createBuffer(2, n, sr);
+      var rise = sr * 0.012;         // 开头 12ms 淡入，否则听起来糊在脸上
+      for (var ch = 0; ch < 2; ch++) {
+        var d = buf.getChannelData(ch);
+        for (var i = 0; i < n; i++) {
+          var x = i / n;
+          d[i] = (Math.random() * 2 - 1) * Math.pow(1 - x, decay) * (i < rise ? i / rise : 1);
+        }
+      }
+      return buf;
+    }
+
+    function init() {
+      if (ctx) return true;
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) { warn(true); return false; }
+      try { ctx = new AC(); } catch (e) { warn(true); return false; }
+
+      bus = ctx.createGain();
+
+      // 四件乐器会一起响（公布那一下是锣 + 一串琴 + 鼓），所以最后一定要
+      // 有个压缩器兜着，不然叠起来就爆了。
+      var comp = ctx.createDynamicsCompressor();
+      comp.threshold.value = -16;
+      comp.knee.value = 22;
+      comp.ratio.value = 5;
+      comp.attack.value = 0.004;
+      comp.release.value = 0.22;
+
+      master = ctx.createGain();
+      // 如果语音比音效先起来（首帧就带 speech，boot 那声还没响过），
+      // init 时要直接把让路后的音量落下去，不能等下一次 duck()。
+      master.gain.value = ducked ? VOL * DUCK : VOL;
+
+      var conv = ctx.createConvolver();
+      conv.buffer = makeIR(1.9, 2.6);
+      var damp = ctx.createBiquadFilter();
+      damp.type = 'lowpass'; damp.frequency.value = 3600;   // 混响别太亮
+      var wet = ctx.createGain();
+      wet.gain.value = 0.22;
+
+      bus.connect(comp);                                    // 干
+      bus.connect(conv); conv.connect(damp);                // 湿
+      damp.connect(wet); wet.connect(comp);
+      comp.connect(master); master.connect(ctx.destination);
+
+      ctx.onstatechange = function () { warn(ctx.state !== 'running'); };
+      return true;
+    }
+
+    function warn(on) { if (elWarn) elWarn.hidden = !on; }
+
+    /**
+     * 现在能不能出声。不能就顺手再试着解锁一次，然后静默跳过这一声。
+     * 挂起的上下文里排进去的事件会在恢复的瞬间一起炸出来，不如不排。
+     */
+    function live() {
+      if (!enabled) return false;
+      if (!init()) return false;
+      if (ctx.state !== 'running') {
+        ctx.resume().catch(function () {});
+        return false;
+      }
+      return true;
+    }
+
+    /** 排程用的当前时刻。往前让 20ms，免得排到"过去"被浏览器直接丢掉。 */
+    function at() { return ctx.currentTime + 0.02; }
+
+    return {
+      on: enabled,
+
+      /**
+       * 起手。OBS 的 CEF 和普通浏览器的 autoplay 策略不一样——CEF 里通常
+       * 一上来就是 running，普通浏览器要等第一次点击。两边都兜住：
+       * 先自己 resume 一次，900ms 后还没起来就把提示挂出来，同时留一个
+       * 手势监听做后手。
+       */
+      boot: function () {
+        if (!enabled) return;
+        init();
+        if (ctx) ctx.resume().catch(function () {});
+        setTimeout(function () {
+          if (ctx && ctx.state !== 'running') warn(true);
+        }, 900);
+        var kick = function () { if (ctx) ctx.resume().catch(function () {}); };
+        window.addEventListener('pointerdown', kick);
+        window.addEventListener('touchstart', kick);
+        window.addEventListener('keydown', kick);
+      },
+
+      /** 换题：鼓起手，四个选项依次落位——音高就是五声音阶的前四级，
+       *  和 CSS 里 .opt 的 animation-delay（.10/.16/.22/.28s）对齐。 */
+      question: function () {
+        if (!live()) return;
+        var t = at();
+        buk(t, 0.30, 78, 0.50);
+        for (var i = 0; i < 4; i++) {
+          pluck(i, t + 0.10 + i * 0.06, 0.90, 0.13);
+        }
+      },
+
+      /** 封盘：闷一记鼓 + 两个下行的琴音，听得出来"收住了"。 */
+      lock: function () {
+        if (!live()) return;
+        var t = at();
+        buk(t, 0.30, 62, 0.30);
+        pluck(3, t + 0.05, 0.40, 0.11);
+        pluck(1, t + 0.13, 0.42, 0.10);
+      },
+
+      /**
+       * 公布：大锣 + 伽倻琴一路爬上去。整场最响的一下，题目就等这一声。
+       * `nobody` 时换成下行的版本——一道没人答对的题不该配凯旋的调子。
+       */
+      reveal: function (streak, nobody) {
+        if (!live()) return;
+        var t = at();
+        if (nobody) {
+          jing(t, 0.18, hz(-2), 2.20);
+          pluck(3, t + 0.10, 1.20, 0.11);
+          pluck(1, t + 0.22, 1.30, 0.10);
+          return;
+        }
+        jing(t, 0.22, hz(-2), 3.40);
+        for (var i = 0; i < 9; i++) {
+          pluck(i, t + 0.07 + i * 0.045, 1.50, 0.12);
+        }
+        buk(t + 0.44, 0.26, 84, 0.45);
+        // 有人在连对，加一串小锣；连对的火苗值得多两下。
+        if (streak) {
+          for (var k = 0; k < 3; k++) {
+            kk(t + 0.62 + k * 0.085, 0.085, hz(6 + k * 3), 0.50);
+          }
+        }
+      },
+
+      /** 有人作答：一两声轻拨。n 是新进来的人数，最多响两声。 */
+      answer: function (n) {
+        if (!live()) return;
+        var t = at();
+        // 刷起来的时候弹幕是几十条一秒，而每计入一条就推一次状态。不压的话
+        // 这里会连成机关枪。压成雨点：每秒最多七声，多出来的整批吞掉——
+        // 听感上是「很多人同时在答」，而不是「一个声音在抖」。
+        if (t - lastAnswer < 0.13) return;
+        lastAnswer = t;
+        for (var i = 0; i < n; i++) {
+          pluck(3 + (answerStep++ % 5), t + i * 0.035, 0.55, 0.055);
+        }
+      },
+
+      /** 最后十秒的催。音高跟着秒数往上爬，越到后面越急。 */
+      urgency: function (secs) {
+        if (!live()) return;
+        var t = at();
+        var i = Math.max(0, URGENT_SECS - secs);
+        metal(hz(1 + i), R_TICK, t, 0.32, 0.05, 3000);
+        if (secs <= 3) buk(t, 0.09, 62, 0.20);
+      },
+
+      /** 断线 / 重连。断线用一声下沉的锣——不看屏幕也听得见出事了。 */
+      offline: function () {
+        if (!live()) return;
+        var t = at();
+        jing(t, 0.16, hz(-3), 1.60);
+        buk(t + 0.10, 0.20, 55, 0.50);
+      },
+      online: function () {
+        if (!live()) return;
+        pluck(5, at(), 1.20, 0.10);
+      },
+
+      /**
+       * 语音期间让音效退到后面去，语音结束再抬回来。
+       *
+       * 为什么选"压低"而不是"延后/抑制 reveal"：公布那一下的锣和花腔是按
+       * 画面写的——.opt.correct 弹出、答案亮出来的**同一帧**起声。把它延后
+       * 到讲解之后，画面早就不动了，那声锣就变成没来由的一响；直接抑制更
+       * 亏，整场最响的那记标点就没了。压低两头都保住：音效还是标点，只是
+       * 退到人声后面。
+       *
+       * 只动主输出这一个 gain。已经排进去的音源都是从这个节点出去的，
+       * 会跟着一起让路，不用去追每一个。
+       *
+       * 不用 setTargetAtTime：目标是 0 附近时指数逼近永远到不了，而这里
+       * 线性斜坡的手感就够——让路要快（30ms，别让第一下抢在人声前），
+       * 回来要缓（350ms，像是"说完了，背景音乐回来"）。
+       */
+      duck: function (on) {
+        ducked = !!on;
+        // 没起过声就不必为它专门建一个 AudioContext——语音不依赖音效。
+        if (!enabled || !ctx || !master) return;
+        var g = master.gain;
+        g.cancelScheduledValues(ctx.currentTime);
+        g.setValueAtTime(g.value, ctx.currentTime);
+        g.linearRampToValueAtTime(ducked ? VOL * DUCK : VOL,
+                                  ctx.currentTime + (ducked ? 0.03 : 0.35));
+      }
+    };
+  })();
+
+  // ==================== 语音 ====================
+  //
+  // 服务端已经合成好的 MP3，页面只负责播。**绝不用 speechSynthesis**：
+  // OBS 的浏览器源是 CEF，getVoices() 返回空数组，而且是永远空的——
+  // 那套在这里根本不出声。所以哪怕这段语音没拿到，也只能是"这一句没声"，
+  // 不能退化成浏览器 TTS 顶上。
+  //
+  // 开关和音效分开：?sfx=0 只关音效（装饰），语音（内容）照播；真要连
+  // 语音一起关，得显式写 ?voice=0。
+  var VOICE = (function () {
+    'use strict';
+
+    var enabled = params.get('voice') !== '0';
+
+    // 上一次播过的语音 id。OBS 刷新或 SSE 重连会重收一份当前状态（watch
+    // 语义，首帧就是当前共享值），同一个 id 再播一遍，就成了"每断一次线
+    // 它把刚才那句又说一遍"。任务要的是一条变量，这里用 sessionStorage
+    // 托底：内存变量扛不住 OBS 刷新（整页重载），而刷新恰恰是最常见的
+    // 一次"重收"。取不到就退回纯内存，行为不变。
+    var KEY = 'overlay.voice.played';
+    var playedId = null;
+    try { playedId = window.sessionStorage.getItem(KEY); } catch (e) {}
+
+    var current = null;   // 正在念的那条 speech，善后要用它的 id
+    var timer = null;     // 兜底超时
+    var done = true;      // 只善后一次；空闲时是 true，一开播翻成 false
+
+    function showSub(text) {
+      // 没字幕文本就不占那块地方——只在真的有话说时才亮出来。
+      if (!text) return;
+      elSayTxt.textContent = text;
+      elSay.classList.add('on');
+    }
+    function hideSub() { elSay.classList.remove('on'); }
+
+    /**
+     * 收尾：字幕淡出、音效抬回来、回报服务端。
+     * ended / error / 兜底超时三条路都汇到这里，`done` 保证只走一次——
+     * 三条路很可能同时到（比如超时那一刻音频刚好 error）。
+     */
+    function finish() {
+      if (done) return;
+      done = true;
+      if (timer) { clearTimeout(timer); timer = null; }
+      hideSub();
+      SFX.duck(false);
+      var sp = current;
+      current = null;
+      if (!sp) return;
+      // 告诉服务端"这句念完了"，它才推进到下一阶段。回报失败吞掉就好——
+      // 服务端自己按 duration_ms 也有兜底超时，页面不能因为一次 POST
+      // 失败就把自己卡在这条语音上。
+      try {
+        fetch('/api/spoken', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: sp.id })
+        }).catch(function () {});
+      } catch (e) { /* 没有 fetch 的老环境：交给服务端超时 */ }
+    }
+
+    function play(sp) {
+      current = sp;
+      done = false;
+      showSub(sp.text);
+      // 语音和音效叠在一起会糊；让音效先退到后面去。
+      SFX.duck(true);
+
+      // 服务端按字节估的时长只是**兜底**：正常靠 ended 收尾，这里防的是
+      // "URL 拿不到、ended 永远不来"，那样音效会一直压在 0.25 上不回来。
+      timer = setTimeout(finish, (sp.duration_ms || 0) + 2000);
+
+      elVoice.src = sp.url;
+      var p = elVoice.play();
+      // 自动播放被拒时 play() 会 reject；ended 不会来，等兜底超时收尾。
+      if (p && p.catch) p.catch(function () {});
+    }
+
+    if (elVoice) {
+      elVoice.addEventListener('ended', finish);
+      elVoice.addEventListener('error', finish);
+    }
+
+    return {
+      /** 每次 render 把最新的 speech 交进来；null 也交，用它判断要不要善后。 */
+      sync: function (sp) {
+        if (!enabled) return;
+        // 服务端还没上这个字段时推的是 undefined，和 null 一起当"没有"处理。
+        if (!sp) {
+          // 服务端把 speech 收回去了（正常是它收到回报之后才清）。真走到
+          // 这一步我们还没念完，说明服务端已经翻篇——别再让旧语音压住新画面。
+          if (current) finish();
+          return;
+        }
+        if (!sp.id || !sp.url) return;    // 半条数据宁可不响；服务端会超时兜底
+        if (sp.id === playedId) return;   // 重连/刷新重放：同一个 id 不重播
+        // 还没念完又来了一条新的：旧的先收尾（会回报一次），再起新的。
+        if (current) finish();
+        playedId = sp.id;
+        try { window.sessionStorage.setItem(KEY, playedId); } catch (e) {}
+        play(sp);
+      }
+    };
+  })();
+
+  var state = null;        // 最近一次服务端状态
+  var lastQid = null;      // 上一道题的 id，用来判断要不要放换题动画
+  var options = [];        // 复用的四个选项节点
+  var offline = false;     // SSE 断了。断了要挂在横幅上告诉主播。
+  var es = null;
+
+  // 字数分档。韩文一个字的词和一句 20 字的短句，同一个字号不可能都好看。
+  function sizeClass(text, tiers) {
+    var n = Array.from(text || '').length;
+    for (var i = 0; i < tiers.length; i++) {
+      if (n <= tiers[i][0]) return tiers[i][1];
+    }
+    return tiers[tiers.length - 1][1];
+  }
+  var PROMPT_TIERS = [[3, 'len-xs'], [7, 'len-s'], [16, 'len-m'], [Infinity, 'len-l']];
+  var OPTION_TIERS = [[5, 'len-s'], [10, 'len-m'], [Infinity, 'len-l']];
+
+  function buildOptions() {
+    elOpts.innerHTML = '';
+    options = [];
+    for (var i = 0; i < 4; i++) {
+      var el = document.createElement('div');
+      el.className = 'opt';
+      el.innerHTML =
+        '<span class="row">' +
+          '<span class="letter">' + 'ABCD'[i] + '</span>' +
+          '<span class="text"></span>' +
+          '<span class="votes"></span>' +
+        '</span>' +
+        '<span class="bar"></span>' +
+        // 公布那一刻，抢答榜上的卡片飞到这里落位。
+        '<span class="picks"></span>';
+      elOpts.appendChild(el);
+      options.push(el);
+    }
+  }
+
+  var booted = false;   // 第一帧不响：OBS 刷新页面时会重放当前题，不该炸一声
+
+  /**
+   * 声音挂在**状态迁移**上，不挂在渲染上。
+   *
+   * 同一个状态会被推很多次（有人作答就推一次，重连还会再推一遍），
+   * 照着渲染次数放声，画面里会一直在响。所以只认 prev → s 的那一下变化。
+   */
+  function soundCues(prev, s, isNewQuestion) {
+    if (!SFX.on) return;
+    if (!booted) { booted = true; return; }
+
+    if (isNewQuestion) SFX.question();
+
+    if (prev && prev.phase !== s.phase) {
+      if (s.phase === 'locked') {
+        SFX.lock();
+      } else if (s.phase === 'revealed') {
+        // 一道没人答对的题，配凯旋的调子就不对了。
+        var nobody = !s.stats || s.stats.correct === 0;
+        SFX.reveal(bestStreak(s.awards), nobody);
+      }
+    }
+
+    // 作答声按"新进来几个人"给，不按推送次数给——服务端是 watch 语义，
+    // 一波弹幕到页面时可能已经被合并成一次推送了。
+    if (prev && s.phase === 'collecting' && s.participants > prev.participants) {
+      SFX.answer(Math.min(2, s.participants - prev.participants));
+    }
+  }
+
+  function render(s) {
+    var prev = state;
+    state = s;
+    stage.className = 'stage ' + s.phase;
+
+    // 换题了才放入场动画。同一题被推很多次（有人作答就推一次），
+    // 每次都重放的话屏幕会一直在抖。
+    var isNewQuestion = s.question.id !== lastQid;
+    if (isNewQuestion) {
+      lastQid = s.question.id;
+      // 上一题的卡片可能还在天上飞，换题了就别让它落到新题上。
+      clearGhosts();
+      stage.classList.remove('enter');
+      void stage.offsetWidth;   // 强制重排，否则动画不会重放
+      stage.classList.add('enter');
+    }
+
+    // **必须在动 DOM 之前量起点。** 下面 `renderTicker` 会把榜整个重画，
+    // 那一刻卡片的位置就没了。见 `liftOff`。
+    var lifted = liftOff(s, prev);
+
+    elQidx.textContent = s.index;
+    elQtotal.textContent = s.total;
+
+    elPrompt.textContent = s.question.prompt;
+    elPrompt.className = 'q-prompt ' + sizeClass(s.question.prompt, PROMPT_TIERS);
+
+    var revealed = s.phase === 'revealed';
+    /**
+     * 票数条的分母：本题**答过**的人数（同人去重后）。
+     *
+     * 原来这里用的是「票数最多的那个选项」，于是最热门的选项永远是满格、
+     * 其余按它的比例缩。看起来像那么回事，但读出来是错的：十个观众答了题、
+     * 三个人选 A，条子却画到 3/4 长——那个长度说的是「A 比 B 少一点」，
+     * 而观众看到的是「A 占了多少人」，对不上。
+     *
+     * 现在分母和上面分布条的三档、右边那个「答对率」**同源**。三处报的
+     * 是同一件事，分母不一样的话，画面会自相矛盾。
+     */
+    var voters = (revealed && s.stats) ? s.stats.participants : 0;
+
+    for (var i = 0; i < 4; i++) {
+      var el = options[i];
+      var txt = s.question.options[i];
+      var textEl = el.querySelector('.text');
+      textEl.textContent = txt;
+      textEl.className = 'text ' + sizeClass(txt, OPTION_TIERS);
+
+      var isCorrect = revealed && s.question.correct === 'ABCD'[i];
+      el.classList.toggle('correct', isCorrect);
+
+      var votes = el.querySelector('.votes');
+      var bar = el.querySelector('.bar');
+      if (revealed && s.stats) {
+        votes.textContent = s.stats.tally[i] + ' 票';
+        // 没人作答时 `voters` 是 0，条子一律空着——别除以 0。
+        bar.style.width = (voters ? s.stats.tally[i] / voters * 100 : 0) + '%';
+      } else {
+        votes.textContent = '';
+        bar.style.width = '0%';
+      }
+
+      renderPicks(el.querySelector('.picks'), 'ABCD'[i], revealed ? s.ticker : null);
+    }
+
+    // 公布之后这块从「多少人答了」换成「答对率」——那才是这时候有用的数。
+    // 中韩两个标签得一起换，只换一边会读成「已作答 정답률 22%」。
+    if (revealed && s.stats) {
+      elStatZh.textContent = '答对率';
+      elStatKo.textContent = '정답률';
+      elStatV.textContent = Math.round(s.stats.accuracy * 100) + '%';
+    } else {
+      elStatZh.textContent = '已作答';
+      elStatKo.textContent = '답변';
+      elStatV.textContent = s.participants;
+    }
+
+    renderDist(s);
+    renderTicker(s);
+    renderBoard(s);
+    renderGains(s);
+    renderBanner(s);
+    // 选项和榜都画完了，两边的位置都量得到，可以飞了。
+    flyPicks(lifted, s);
+    tickCountdown();
+    // 语音先起（或先让路），音效再叠上来——这样公布那一下的花腔一开口
+    // 就已经在让路后的音量上，不会先炸一下再被压下去。
+    VOICE.sync(s.speech);
+    soundCues(prev, s, isNewQuestion);
+  }
+
+  /**
+   * 全场答题分布。**只有公布之后服务端才给数据**，给之前三条不显示，
+   * 但整块仍然占着高度——理由和做法见 CSS 里 `.dist .seg` 那段注释。
+   *
+   * 三条的宽度按人数分（flex-grow），数字按人数多少切换成人次或百分比。
+   * 宽度和数字是同一份比例的两个说法，所以切换显示方式时条子不会动。
+   */
+  function renderDist(s) {
+    var d = s.distribution;
+    // 用类名而不是 `hidden`：`hidden` 是 `display: none`，会把高度一起收走。
+    elDist.classList.toggle('on', !!d);
+    if (!d) return;
+
+    var total = d.correct + d.wrong + d.absent;
+    // 三档一起进位，保证加起来正好 100——不然画面上会出现
+    // 33% + 33% + 33%，或者更糟的 101%。
+    var pct = roundToHundred([d.correct, d.wrong, d.absent]);
+
+    // 人数少的时候报人数：「3 人答对」比「30% 答对」有用，分母太小，
+    // 百分比是噪声。过了 100 人再反过来。
+    function label(i, n) {
+      return d.percent ? pct[i] + '%' : n + ' 人';
+    }
+
+    elDistOk.firstChild.textContent = label(0, d.correct);
+    elDistNo.firstChild.textContent = label(1, d.wrong);
+    elDistOff.firstChild.textContent = label(2, d.absent);
+
+    // 人数定宽度。全 0（没人作答）时三条平分，别除以 0。
+    elDistOk.style.flexGrow = d.correct;
+    elDistNo.style.flexGrow = d.wrong;
+    elDistOff.style.flexGrow = d.absent;
+
+    // 「没作答」是 0 就别占一格——那时候它不是信息，是噪声。
+    elDistOff.hidden = d.absent === 0;
+  }
+
+  /**
+   * 三个数各自取整成百分比，且**加起来正好 100**。
+   *
+   * 分别 `Math.round` 的话，三份 1/3 会变成 33+33+33=99；混着几个
+   * 舍入方向不同的，又会凑出 101。直播画面上挂着一条加起来 99% 的
+   * 分布条，比数字难看多了。所以先全部向下取整，剩下的名额按小数部分
+   * 从大到小补——这是最大余额法，补完一定正好 100。
+   */
+  function roundToHundred(vals) {
+    var total = vals[0] + vals[1] + vals[2];
+    if (!total) return [0, 0, 0];
+
+    var raw = [], out = [], frac = [], rest = 0;
+    for (var i = 0; i < 3; i++) {
+      raw[i] = vals[i] / total * 100;
+      out[i] = Math.floor(raw[i]);
+      frac[i] = raw[i] - out[i];
+      rest += out[i];
+    }
+    var order = [0, 1, 2].sort(function (a, b) { return frac[b] - frac[a]; });
+    for (var k = 0; k < 100 - rest; k++) out[order[k % 3]]++;
+    return out;
+  }
+
+  /**
+   * 往一张抢答卡片里填内容：名次角标 + 昵称（+ 选项字母）。
+   *
+   * 榜上的卡片、飞行中的克隆体、落进选项里的那张，**三处都走这里**。它们
+   * 必须长得一模一样：飞行是按落点宽度算缩放比的（见 `flyOne`），只要差
+   * 一点，卡片落地就会弹一下；而各写各的，改了一处忘另一处，这种错要等到
+   * 直播当天、卡片飞起来的那一刻才看得出来。
+   *
+   * `withChoice` 只有榜上给 true。选项字母在榜上是信息（谁选了哪个），
+   * 飞进选项里就成了废话——卡片落在哪个格子里，本身就是答案。
+   */
+  function fillCard(el, t, withChoice) {
+    var rk = document.createElement('i');
+    rk.className = 'r';
+    rk.textContent = t.rank;
+    el.appendChild(rk);
+    el.appendChild(document.createTextNode(t.nickname));
+
+    if (withChoice && t.choice) {
+      var c = document.createElement('span');
+      c.className = 'c';
+      c.textContent = t.choice;
+      el.appendChild(c);
+    }
+  }
+
+  function renderTicker(s) {
+    var list = s.ticker || [];
+    elTicks.innerHTML = '';
+
+    if (!list.length) {
+      if (s.phase === 'revealed') {
+        elTickHd.textContent = '本题无人答对';
+      } else if (s.phase === 'locked') {
+        // 封盘了还在喊「打出你的答案」就尴尬了。
+        elTickHd.textContent = '本题无人作答';
+      } else {
+        // 收答期间空着，正好放号召。直播间最缺的就是「我该干什么」。
+        elTickHd.textContent = '';
+        elTicks.innerHTML =
+          '<div class="cta">在评论区打出你的答案' +
+          '<span class="keys"><b>A</b><b>B</b><b>C</b><b>D</b></span></div>';
+      }
+      return;
+    }
+
+    // 公布之后卡片已经飞到上面各选项里去了，榜上不再重复列一遍名字——
+    // 同一批人挂在两个地方，观众得自己判断「这两处说的是不是一回事」。
+    // 这里只留一句汇总，具体的落位看选项。
+    if (s.phase === 'revealed') {
+      var right = 0;
+      for (var k = 0; k < list.length; k++) if (list[k].correct === true) right++;
+      elTickHd.textContent = '本轮抢答 · 이번 문제';
+      var sum = document.createElement('div');
+      sum.className = 'cta';
+      sum.textContent = list.length + ' 人抢答，' + right + ' 人答对';
+      elTicks.appendChild(sum);
+      return;
+    }
+
+    // 榜上就十个位置，答满就封榜。标题把这件事说清楚——不然收答后半程
+    // 名字不再刷新，看着像画面卡住了。
+    elTickHd.textContent = s.phase === 'locked'
+      ? '抢答榜已封 · 마감'
+      : '抢答榜 · 선착순 ' + list.length + '/' + TICKER_SLOTS;
+
+    for (var i = 0; i < list.length; i++) {
+      var t = list[i];
+      var el = document.createElement('span');
+      // `data-rank` 是飞行时认人的凭证：公布那一刻榜上的卡片要飞到选项里，
+      // 两边就靠这个对上号。重名的人直播间里一定有，名字不能当 key。
+      el.className = 'tick' + (t.correct === true ? ' ok' : t.correct === false ? ' no' : '');
+      el.setAttribute('data-rank', t.rank);
+      fillCard(el, t, true);
+      elTicks.appendChild(el);
+    }
+  }
+
+  // ==================== 抢答卡片落位 ====================
+  //
+  // 公布那一刻，下面抢答榜里的卡片要飞到上面自己选的那个选项里去。
+  //
+  // 用 FLIP，不用「算坐标」：起点量榜上的卡片，终点量选项里刚渲染好的
+  // 小卡片，克隆体从前者飞到后者。位置全是量出来的——选项高度跟着题干
+  // 长短变、榜上换几行跟着名字长短变、比例一变整套尺寸跟着 --u 缩，
+  // 这些算不出来，量得出来。
+
+  /** 榜上留几个位置。和服务端 session.rs 的 TICKER_LEN 是同一个数。 */
+  var TICKER_SLOTS = 10;
+
+  function reducedMotion() {
+    return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  /**
+   * 把选项里的落位卡片画出来。`list` 为空就是清空。
+   *
+   * 只画**抢答榜上那十个**（`s.ticker`），不是所有答对的人——题面问的是
+   * 「这几张卡片飞到选项里」，全员都塞进来的话一格能挤几十个名字。
+   */
+  function renderPicks(box, letter, list) {
+    if (!box) return;
+    box.innerHTML = '';
+    if (!list) return;
+
+    for (var i = 0; i < list.length; i++) {
+      var t = list[i];
+      if (t.choice !== letter) continue;
+
+      var el = document.createElement('span');
+      el.className = 'pick' + (t.correct === true ? ' ok' : t.correct === false ? ' no' : '');
+      // 和榜上的卡片同一个 key，飞行时靠它对上号。见 `renderTicker`。
+      el.setAttribute('data-rank', t.rank);
+      fillCard(el, t);
+      box.appendChild(el);
+    }
+  }
+
+  /**
+   * 记下榜上每张卡片现在的位置。**必须在改写 DOM 之前调用**——
+   * 下一行 `renderTicker` 就把这块整个重画了，起点只有这一瞬间还在。
+   *
+   * 返回 `null` 表示这一帧没有卡片要飞。
+   */
+  function liftOff(s, prev) {
+    // 只认「刚刚变成公布」的那一下。同一个状态会被推很多次
+    // （重连、有人作答），照着帧数飞的话卡片会一直在天上。
+    if (!prev || prev.phase === 'revealed' || s.phase !== 'revealed') return null;
+    if (reducedMotion()) return null;
+
+    var cards = elTicks.querySelectorAll('.tick');
+    if (!cards.length) return null;
+
+    var out = {};
+    var n = 0;
+    for (var i = 0; i < cards.length; i++) {
+      var r = cards[i].getBoundingClientRect();
+      // 宽高为 0 = 这块被 CSS 藏了（窄比例下会收起一些区域），别拿它当起点。
+      if (r.width < 1 || r.height < 1) continue;
+      out[cards[i].getAttribute('data-rank')] = r;
+      n++;
+    }
+    return n ? out : null;
+  }
+
+  /** 让克隆体飞过去。此时 DOM 已经是新的了，终点量得到。 */
+  function flyPicks(from, s) {
+    if (!from) return;
+
+    var chips = elOpts.querySelectorAll('.pick');
+    var to = {};
+    for (var i = 0; i < chips.length; i++) {
+      to[chips[i].getAttribute('data-rank')] = chips[i];
+    }
+
+    var list = s.ticker || [];
+    var order = 0;
+    for (var j = 0; j < list.length; j++) {
+      var src = from[list[j].rank];
+      var chip = to[list[j].rank];
+      if (!src || !chip) continue;   // 名次对不上就让它直接落位，别硬飞
+      var dst = chip.getBoundingClientRect();
+      if (dst.width < 1) continue;
+
+      // 真卡片先藏起来。不藏的话同一张卡片会在榜上和选项里同时被看见，
+      // 看起来像复制了一份而不是飞过去。
+      chip.classList.add('waiting');
+      flyOne(list[j], src, dst, order++, chip);
+    }
+  }
+
+  /** 一张卡片的一次飞行。 */
+  function flyOne(t, src, dst, order, chip) {
+    var g = document.createElement('div');
+    // 和落点那张真卡片同一套样式（`.tick, .pick` 是共用的），所以
+    // 量出来的宽度一致、缩放比是 1，落地严丝合缝接上。
+    g.className = 'ghost tick' + (t.correct === true ? ' ok' : t.correct === false ? ' no' : '');
+    fillCard(g, t, false);
+
+    g.style.left = src.left + 'px';
+    g.style.top = src.top + 'px';
+    g.style.transformOrigin = 'top left';
+    document.body.appendChild(g);
+
+    var w = g.getBoundingClientRect().width || 1;
+    var dx = dst.left - src.left;
+    var dy = dst.top - src.top;
+    var scale = dst.width / w;
+    // 中途抬一下，走出一个弧线。直线飞过去像瞬移，抬一下才有「跳」的意味。
+    var arc = Math.min(26, Math.abs(dy) * 0.3);
+
+    var anim = g.animate([
+      { transform: 'translate(0,0) scale(1)' },
+      {
+        transform: 'translate(' + (dx * 0.55) + 'px,' + (dy * 0.6 - arc) + 'px) scale(' + (1 + scale) / 2 + ')',
+        offset: 0.55
+      },
+      { transform: 'translate(' + dx + 'px,' + dy + 'px) scale(' + scale + ')' }
+    ], {
+      // 一张一张起飞。一起飞的话十张卡片是一坨，看不出「谁先答的」——
+      // 而先答后答正是这张榜的全部意义。
+      delay: order * 55,
+      duration: 620,
+      easing: 'cubic-bezier(.3,.85,.35,1)',
+      fill: 'both'
+    });
+
+    anim.onfinish = function () {
+      g.remove();
+      // 克隆体落地的那一刻真卡片才显形，位置严丝合缝。
+      chip.classList.remove('waiting');
+    };
+  }
+
+  /** 没人看着的时候（换题、重连）把天上还飞着的收掉。 */
+  function clearGhosts() {
+    var left = document.querySelectorAll('.ghost');
+    for (var i = 0; i < left.length; i++) left[i].remove();
+  }
+
+  // 本轮谁得了多少分，按名字索引，给榜单行加「+N」用。
+  function gainIndex(s) {
+    var map = {};
+    var list = s.awards || [];
+    for (var i = 0; i < list.length; i++) map[list[i].nickname] = list[i];
+    return map;
+  }
+
+  function renderBoard(s) {
+    var board = s.leaderboard || [];
+    var gains = gainIndex(s);
+
+    elBoardN.textContent = s.ranked_count > 0 ? s.ranked_count + ' 人上榜' : '还没有人上榜';
+
+    elRows.innerHTML = '';
+    if (!board.length) {
+      var li = document.createElement('li');
+      li.className = 'empty';
+      li.textContent = '答对第一题就能上榜';
+      elRows.appendChild(li);
+      return;
+    }
+
+    for (var i = 0; i < board.length; i++) {
+      var r = board[i];
+      var row = document.createElement('li');
+      row.className = 'row' + (gains[r.nickname] ? ' hot' : '');
+      row.setAttribute('data-rank', r.rank);
+
+      var rk = document.createElement('span');
+      rk.className = 'rk';
+      rk.textContent = r.rank;
+
+      var nm = document.createElement('span');
+      nm.className = 'nm';
+      nm.textContent = r.nickname;
+
+      row.appendChild(rk);
+      row.appendChild(nm);
+
+      // 连对 3 题以上给个火苗——这是榜上唯一会加速的东西。
+      if (r.streak >= 3) {
+        var fire = document.createElement('span');
+        fire.className = 'fire';
+        fire.textContent = '🔥' + r.streak;
+        row.appendChild(fire);
+      }
+
+      var g = gains[r.nickname];
+      if (g) {
+        var gain = document.createElement('span');
+        gain.className = 'gain';
+        gain.textContent = '+' + g.gained;
+        row.appendChild(gain);
+      }
+
+      var sc = document.createElement('span');
+      sc.className = 'sc';
+      sc.textContent = r.score;
+      row.appendChild(sc);
+
+      elRows.appendChild(row);
+    }
+  }
+
+  function renderGains(s) {
+    var list = (s.awards || []).slice();
+    elGains.innerHTML = '';
+    if (!list.length) return;
+    list.sort(function (a, b) { return b.gained - a.gained; });
+
+    for (var i = 0; i < Math.min(5, list.length); i++) {
+      var a = list[i];
+      var li = document.createElement('li');
+
+      var nm = document.createElement('span');
+      nm.className = 'nm';
+      nm.textContent = a.nickname;
+
+      var tag = document.createElement('span');
+      tag.className = 'tag';
+      tag.textContent = '第' + a.rank + '个答对';
+
+      var pt = document.createElement('span');
+      pt.className = 'pt';
+      pt.textContent = '+' + a.gained;
+
+      li.appendChild(nm);
+      li.appendChild(tag);
+      li.appendChild(pt);
+      elGains.appendChild(li);
+    }
+  }
+
+  function renderBanner(s) {
+    // 有人在连对，比封盘提醒更值得占这个位置。
+    var cheer = bestStreak(s.awards);
+    if (s.phase === 'revealed' && cheer) {
+      elCheer.textContent = '🔥 ' + cheer.nickname + ' 连对 ' + cheer.streak + ' 题！';
+      elCheer.hidden = false;
+    } else {
+      elCheer.hidden = true;
+    }
+
+    if (s.phase === 'locked') {
+      elBanner.textContent = '封盘 · 停止收答';
+      elBanner.className = 'banner';
+      elBanner.hidden = false;
+    } else if (offline) {
+      elBanner.textContent = '连接中断 · 重连中';
+      elBanner.className = 'banner off';
+      elBanner.hidden = false;
+    } else {
+      elBanner.hidden = true;
+    }
+  }
+
+  function bestStreak(awards) {
+    var best = null;
+    var list = awards || [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].streak >= 3 && (!best || list[i].streak > best.streak)) best = list[i];
+    }
+    return best;
+  }
+
+  var lastTick = null;   // 上一次催秒响在第几秒，防止一秒响十下
+
+  // 倒计时在本地跑，不靠服务端每秒推。画面更顺，也省一次网络往返。
+  function tickCountdown() {
+    if (!state) return;
+    var phase = state.phase;
+    var collecting = phase === 'collecting';
+    var ms = collecting ? Math.max(0, state.ends_at_ms - Date.now()) : 0;
+    var secs = Math.ceil(ms / 1000);
+
+    if (collecting) {
+      elCd.textContent = secs;
+    } else if (phase === 'locked') {
+      elCd.textContent = '封盘';
+    } else if (phase === 'presenting') {
+      // 题已经亮出来了，但 AI 还在念题干，计时没开始。这时候读秒等于
+      // 观众还没听完就在被催——环先顶到满格，表示"整段时间都还在"。
+      elCd.textContent = '准备';
+    } else {
+      elCd.textContent = '公布';
+    }
+
+    stage.classList.toggle('urgent', collecting && secs <= URGENT_SECS);
+
+    // 催秒的声音跟着本地倒计时走，和心跳的动画是同一个节拍。
+    // 只在秒数真的跳了一格时响——这个函数 100ms 跑一次，不设卡子会响十遍。
+    // presenting 阶段 collecting 是 false，这里自然不会响。
+    var ticking = collecting && secs <= URGENT_SECS && secs > 0;
+    if (ticking && secs !== lastTick) SFX.urgency(secs);
+    lastTick = ticking ? secs : null;
+
+    // presenting 时 ms 恒为 0，按公式算是空环——但这一格该是满的，单独给。
+    var pct = phase === 'presenting' ? 1
+            : (state.window_ms > 0 ? Math.min(1, ms / state.window_ms) : 0);
+    ringFill.style.strokeDashoffset = CIRC * (1 - pct);
+  }
+
+  // ---------- 连接 ----------
+  function connect() {
+    if (es) es.close();
+    es = new EventSource('/api/events');
+
+    es.addEventListener('state', function (e) {
+      offline = false;
+      render(JSON.parse(e.data));
+    });
+
+    es.onopen = function () {
+      if (offline) SFX.online();
+      offline = false;
+      if (state) renderBanner(state);
+    };
+
+    // EventSource 自己会重连，这里只负责把状态显示出来。
+    // 断开这段时间 onerror 会反复触发，所以只认"从在线掉到离线"那一次。
+    es.onerror = function () {
+      if (!offline) SFX.offline();
+      offline = true;
+      if (state) renderBanner(state);
+    };
+  }
+
+  buildOptions();
+  SFX.boot();
+  connect();
+  setInterval(tickCountdown, 100);
+})();
+</script>
+</body>
+</html>

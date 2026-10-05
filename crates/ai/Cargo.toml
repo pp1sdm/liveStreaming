@@ -1,0 +1,27 @@
+[package]
+name = "livestream-ai"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+livestream-core.workspace = true
+
+anyhow.workspace = true
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "time", "net"] }
+tracing.workspace = true
+
+# Edge 在线语音走 wss，必须带 TLS。用 webpki 内置根证书，
+# 免得在 WSL / 容器里还要依赖系统证书目录。
+tokio-tungstenite = { workspace = true, features = ["rustls-tls-webpki-roots"] }
+futures-util = "0.3"
+sha2 = "0.10"
+
+# DeepSeek 走 https，同样要 TLS。
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
+dotenvy.workspace = true

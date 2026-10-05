@@ -1,0 +1,19 @@
+[package]
+name = "livestream-danmaku"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+livestream-core.workspace = true
+
+anyhow.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+# start_paused 让 mock 源的测试用假时钟跑，不用真的等 700ms 一轮。
+tokio = { workspace = true, features = ["test-util"] }

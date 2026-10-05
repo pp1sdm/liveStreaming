@@ -1,0 +1,671 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>韩语答题 · 控制台</title>
+<!--
+  主播用的控制台。开播时放副屏。
+
+  只有一个键：空格 = 继续。按下去做什么由当前阶段决定——
+  收答中 → 封盘，已封盘 → 公布，已公布 → 下一题。
+
+  以前是三个按钮各绑一个阶段。封盘之后三个里只剩「公布」能动，而它排在最后
+  又没有样式，看上去就像整个页面卡死了。合成一个键之后，每个阶段恰好只有
+  一个正确的下一步，不存在走不出去的岔路。
+
+  配色和画面页同一套：新粗野主义 + 오방색（五方色，韩国传统的青赤黄白黑）。
+  两页看起来得是同一个东西。
+-->
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Noto+Sans+KR:wght@700;900&family=Noto+Sans+SC:wght@500;700;900&display=swap">
+<style>
+  :root {
+    /* 오방색 · 五方色。和画面页同一套色。 */
+    --heuk:   #12100E;   /* 흑 黑 */
+    --baek:   #FFFDF6;   /* 백 白 */
+    --hwang:  #FFCE00;   /* 황 黃 */
+    --cheong: #1B5FA8;   /* 청 靑 */
+    --jeok:   #D8352A;   /* 적 赤 */
+    --hanji:  #F3EADA;   /* 한지 韩纸 */
+    --muted:  #7A7266;
+    --shade:  #E7DDCB;
+
+    --line: 3px solid var(--heuk);
+    --line-2: 2px solid var(--heuk);
+    --hard: 6px 6px 0 var(--heuk);
+    --soft: 3px 3px 0 var(--heuk);
+
+    --f:  'Noto Sans KR', 'Noto Sans SC', system-ui, -apple-system, sans-serif;
+    --fd: 'Archivo Black', 'Noto Sans KR', system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background-color: var(--hanji);
+    background-image: radial-gradient(rgba(18,16,14,.055) 1.4px, transparent 1.4px);
+    background-size: 16px 16px;
+    color: var(--heuk);
+    font-family: var(--f);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1180px;
+    margin-inline: auto;
+    padding-block: 24px 64px;
+    padding-inline: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* ---------- 顶栏 ---------- */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    background: var(--heuk);
+    color: var(--baek);
+    border: var(--line);
+    box-shadow: var(--hard);
+    padding: 14px 20px;
+  }
+  header h1 {
+    margin: 0;
+    font: 900 20px/1.2 var(--fd);
+    letter-spacing: .02em;
+    flex: 1;
+    min-width: 0;
+  }
+  header .sub { font-size: 12px; letter-spacing: .18em; opacity: .6; font-weight: 900;
+                display: block; margin-top: 3px; }
+
+  .phase {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--baek);
+    color: var(--heuk);
+    border: var(--line);
+    padding: 7px 14px;
+    font-weight: 900;
+    font-size: 14px;
+    letter-spacing: .04em;
+  }
+  /* 阶段自己会说话：黄=收答中，红=在催，纸=封盘，青=已公布。 */
+  .phase[data-phase="collecting"] { background: var(--hwang); }
+  .phase[data-phase="urgent"]     { background: var(--jeok); color: var(--baek);
+                                    animation: beat 1s ease-in-out infinite; }
+  .phase[data-phase="locked"]     { background: var(--shade); }
+  .phase[data-phase="revealed"]   { background: var(--cheong); color: var(--baek); }
+  @keyframes beat {
+    0%, 100% { transform: scale(1); }
+    50%      { transform: scale(1.05); }
+  }
+  .phase .ko { font-size: 12px; opacity: .65; }
+
+  .clock {
+    flex: none;
+    font: 900 26px/1 var(--fd);
+    font-variant-numeric: tabular-nums;
+    color: var(--hwang);
+    min-width: 3ch;
+    text-align: right;
+  }
+
+  /* ---------- 卡片 ---------- */
+  .card {
+    background: var(--baek);
+    border: var(--line);
+    box-shadow: var(--hard);
+    padding: 18px 20px;
+  }
+  .card > h2 {
+    margin: 0 0 14px;
+    display: inline-block;
+    background: var(--heuk);
+    color: var(--baek);
+    font-size: 13px;
+    font-weight: 900;
+    letter-spacing: .16em;
+    padding: 5px 12px;
+  }
+  .card > h2 .ko { opacity: .55; margin-left: 7px; letter-spacing: .06em; }
+
+  /* ---------- 继续键 ---------- */
+  /* 整个控制台最重要的一个东西，所以它占满整行、最大、最黄。 */
+  #go {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    width: 100%;
+    padding: 22px 24px;
+    font-family: var(--f);
+    font-size: 30px;
+    font-weight: 900;
+    letter-spacing: .02em;
+    color: var(--heuk);
+    background: var(--hwang);
+    border: var(--line);
+    box-shadow: var(--hard);
+    cursor: pointer;
+    transition: background .15s, transform .06s, box-shadow .06s;
+  }
+  #go:hover:not(:disabled) { background: #FFD84D; }
+  /* 按下去整块位移到阴影里——新粗野主义的按键就该是「摁进去」的。 */
+  #go:active:not(:disabled) {
+    transform: translate(6px, 6px);
+    box-shadow: 0 0 0 var(--heuk);
+  }
+  #go:focus-visible { outline: 4px solid var(--cheong); outline-offset: 3px; }
+  #go:disabled {
+    background: var(--shade);
+    color: var(--muted);
+    cursor: not-allowed;
+    box-shadow: var(--hard);
+  }
+  #go kbd {
+    font: 900 13px/1 var(--f);
+    letter-spacing: .12em;
+    background: var(--heuk);
+    color: var(--baek);
+    padding: 9px 13px;
+    border: none;
+  }
+
+  .hint {
+    margin: 12px 0 0;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--muted);
+  }
+  .err {
+    margin: 12px 0 0;
+    background: var(--jeok);
+    color: var(--baek);
+    border: var(--line);
+    box-shadow: var(--soft);
+    padding: 10px 14px;
+    font-weight: 900;
+    font-size: 14px;
+  }
+  /* 走成了给个回执——不然主播按完不知道那一下有没有生效。 */
+  .toast {
+    margin: 12px 0 0;
+    display: inline-block;
+    background: var(--cheong);
+    color: var(--baek);
+    border: var(--line);
+    box-shadow: var(--soft);
+    padding: 10px 14px;
+    font-weight: 900;
+    font-size: 14px;
+    animation: toast-in .22s cubic-bezier(.2,.9,.3,1.2);
+  }
+  @keyframes toast-in {
+    from { transform: translateY(-6px); opacity: 0; }
+    to   { transform: none; opacity: 1; }
+  }
+  [hidden] { display: none !important; }
+
+  /* ---------- 本题 ---------- */
+  .qmeta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  .qmeta .idx {
+    font: 900 15px/1 var(--fd);
+    background: var(--heuk);
+    color: var(--hwang);
+    padding: 6px 11px;
+    font-variant-numeric: tabular-nums;
+  }
+  /* 整场的进度条。控制台唯一需要「还有多少」的地方。 */
+  .track { flex: 1; min-width: 90px; height: 12px; background: var(--shade);
+           border: var(--line-2); overflow: hidden; }
+  .track i { display: block; height: 100%; background: var(--heuk);
+             width: 0; transition: width .3s cubic-bezier(.2,.7,.3,1); }
+
+  .prompt {
+    font-size: 40px;
+    font-weight: 900;
+    line-height: 1.2;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+    margin: 4px 0 18px;
+  }
+
+  .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .opt {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    background: var(--shade);
+    border: var(--line-2);
+    font-weight: 900;
+    font-size: 17px;
+    transition: background .2s, opacity .2s;
+  }
+  .opt .l {
+    flex: none;
+    width: 30px; height: 30px;
+    display: grid; place-items: center;
+    background: var(--heuk);
+    color: var(--baek);
+    font: 900 15px/1 var(--fd);
+  }
+  .opt .n { margin-left: auto; flex: none; font-size: 13px; color: var(--muted);
+            font-variant-numeric: tabular-nums; font-weight: 700; }
+  /* 公布之后正确项翻青，正好和画面页一致。 */
+  .opt.ok {
+    background: var(--cheong);
+    color: var(--baek);
+    animation: pop .32s cubic-bezier(.2,.9,.3,1.2);
+  }
+  .opt.ok .l { background: var(--baek); color: var(--cheong); }
+  .opt.ok .n { color: var(--hwang); }
+  .opt.dim { opacity: .38; }
+  @keyframes pop {
+    0% { transform: scale(1); }
+    45% { transform: scale(1.03); }
+    100% { transform: scale(1); }
+  }
+
+  /* ---------- 下半区 ---------- */
+  .cols { display: grid; grid-template-columns: 1.15fr .85fr; gap: 20px; align-items: start; }
+  @media (max-width: 820px) {
+    .cols, .opts { grid-template-columns: 1fr; }
+    #go { font-size: 23px; }
+    .prompt { font-size: 30px; }
+  }
+
+  .rows { list-style: none; margin: 0; padding: 0; display: flex;
+          flex-direction: column; gap: 7px; }
+  .row { display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+         background: var(--shade); border: var(--line-2); font-weight: 900; }
+  .row.hot { background: var(--hwang); animation: slide-in .35s cubic-bezier(.2,.9,.3,1); }
+  @keyframes slide-in {
+    from { transform: translateX(-10px); opacity: .4; }
+    to   { transform: none; opacity: 1; }
+  }
+  .row .rk { flex: none; width: 27px; height: 27px; display: grid; place-items: center;
+             background: var(--baek); border: var(--line-2);
+             font: 900 14px/1 var(--fd); font-variant-numeric: tabular-nums; }
+  .row[data-rank="1"] .rk { background: var(--hwang); }
+  .row[data-rank="2"] .rk { background: #C9D0DA; }
+  .row[data-rank="3"] .rk { background: #DFA272; }
+  .row .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+             white-space: nowrap; }
+  .row .sub { flex: none; font-size: 12px; color: var(--muted); font-weight: 700; }
+  .row .sc { flex: none; font: 900 17px/1 var(--fd); font-variant-numeric: tabular-nums; }
+  .row .gain { flex: none; font-size: 13px; color: var(--cheong); font-weight: 900; }
+  .row.hot .gain { color: var(--heuk); }
+
+  .empty { margin: 0; padding: 14px 0; font-size: 14px; color: var(--muted);
+           font-weight: 700; }
+
+  .log { list-style: none; margin: 0; padding: 0; display: flex;
+         flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
+  .log li { display: flex; gap: 9px; align-items: baseline; padding: 7px 10px;
+            background: var(--shade); border-left: 4px solid var(--jeok);
+            font-size: 13px; }
+  .log .who { flex: none; font-weight: 900; max-width: 9ch; overflow: hidden;
+              text-overflow: ellipsis; white-space: nowrap; }
+  .log .what { flex: 1; min-width: 0; word-break: break-word; }
+  /* 判定原因现在是一句人话（「抽到多个字母 AA」），比原来的枚举名长，
+     所以让它能被压缩，别把原文那一列挤没。 */
+  .log .why {
+    flex: 0 1 auto;
+    min-width: 0;
+    color: var(--muted);
+    font-weight: 700;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>韩语答题 · 控制台<span class="sub">KOREAN QUIZ CONSOLE</span></h1>
+    <span class="phase" id="phase" data-phase="collecting">正在连接…</span>
+    <span class="clock" id="clock">--</span>
+  </header>
+
+  <div class="card">
+    <button id="go" disabled>
+      <span id="golabel">正在连接…</span>
+      <kbd>空格</kbd>
+    </button>
+    <p class="hint" id="hint">连上服务后这个键才会活。</p>
+    <p class="err" id="err" hidden></p>
+    <p class="toast" id="toast" hidden></p>
+  </div>
+
+  <div class="card">
+    <div class="qmeta">
+      <span class="idx" id="idx">第 – / – 题</span>
+      <span class="track"><i id="prog"></i></span>
+    </div>
+    <div class="prompt" id="prompt">正在连接…</div>
+    <div class="opts" id="opts"></div>
+  </div>
+
+  <div class="cols">
+
+    <div class="card">
+      <h2>排行榜<span class="ko">순위</span></h2>
+      <ol class="rows" id="rows"></ol>
+      <p class="empty" id="boardempty">还没有人答对。第一题公布后这里就有人了。</p>
+    </div>
+
+    <div class="card">
+      <h2>被丢掉的弹幕<span class="ko">거부됨</span></h2>
+      <p class="empty" id="logempty">最近没有弹幕被丢掉。</p>
+      <ul class="log" id="log"></ul>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var URGENT_SECS = 10;
+
+  // 每个阶段按下去会发生什么。按钮文案和提示都由它生成。
+  var ACTION = {
+    collecting: { label: '继续 · 封盘',     hint: '停止收答。也可以等倒计时自己走完，会自动封盘。' },
+    locked:     { label: '继续 · 公布答案', hint: '揭晓答案，并结算本题得分。' },
+    revealed:   { label: '继续 · 下一题',   hint: '换下一题，倒计时重新开始。' }
+  };
+
+  // 走完之后给个回执，不然按下去没反馈，主播不知道生效没有。
+  var RECEIPT = {
+    locked:   '已封盘，停止收答',
+    revealed: '已公布答案，并结算本题得分',
+    advanced: '已换到下一题'
+  };
+
+  // 阶段的显示文案。同一时刻画面页也在用同一套词。
+  var PHASE = {
+    collecting: ['正在作答', '답변 중'],
+    urgent:     ['即将封盘', '마감 임박'],
+    locked:     ['已封盘',   '마감'],
+    revealed:   ['已公布',   '정답 공개']
+  };
+
+  var elPhase  = document.getElementById('phase');
+  var elClock  = document.getElementById('clock');
+  var btnGo    = document.getElementById('go');
+  var elGoLbl  = document.getElementById('golabel');
+  var elHint   = document.getElementById('hint');
+  var elErr    = document.getElementById('err');
+  var elToast  = document.getElementById('toast');
+  var elIdx    = document.getElementById('idx');
+  var elProg   = document.getElementById('prog');
+  var elPrompt = document.getElementById('prompt');
+  var elOpts   = document.getElementById('opts');
+  var elRows   = document.getElementById('rows');
+  var elEmpty  = document.getElementById('boardempty');
+  var elLog    = document.getElementById('log');
+  var elLogEmp = document.getElementById('logempty');
+
+  var state = null;
+  var phase = null;       // 'collecting' | 'locked' | 'revealed'
+  var busy = false;       // 请求在飞。这期间按键锁死。
+  var es = null;
+  var toastTimer = null;
+  var options = [];
+
+  function buildOptions() {
+    elOpts.innerHTML = '';
+    options = [];
+    for (var i = 0; i < 4; i++) {
+      var el = document.createElement('div');
+      el.className = 'opt';
+      el.innerHTML = '<span class="l">' + 'ABCD'[i] + '</span>' +
+                     '<span class="t"></span><span class="n"></span>';
+      elOpts.appendChild(el);
+      options.push(el);
+    }
+  }
+
+  function render(s) {
+    state = s;
+    phase = s.phase;
+
+    elIdx.textContent = '第 ' + s.index + ' / ' + s.total + ' 题';
+    elProg.style.width = (s.total ? s.index / s.total * 100 : 0) + '%';
+    elPrompt.textContent = s.question.prompt;
+
+    var revealed = phase === 'revealed';
+    var max = 1;
+    if (revealed && s.stats) {
+      for (var k = 0; k < 4; k++) max = Math.max(max, s.stats.tally[k]);
+    }
+
+    for (var i = 0; i < 4; i++) {
+      var el = options[i];
+      var letter = 'ABCD'[i];
+      el.querySelector('.t').textContent = s.question.options[i];
+
+      var isOk = revealed && s.question.correct === letter;
+      el.classList.toggle('ok', isOk);
+      el.classList.toggle('dim', revealed && !isOk);
+
+      var n = el.querySelector('.n');
+      // 票数只在公布后给。收答期间显示票数等于把答案漏出去。
+      n.textContent = revealed && s.stats
+        ? s.stats.tally[i] + ' 票 · ' + Math.round(s.stats.tally[i] / max * 100) + '%'
+        : '';
+    }
+
+    paintPhase();
+    tickClock();
+  }
+
+  var shownPhase = null;   // 上一次画出来的阶段，用来挡掉重复的 DOM 写入
+
+  function paintPhase() {
+    // 「收答中」和「即将封盘」共用 collecting 这个阶段，靠剩余时间区分。
+    var shown = phase;
+    if (phase === 'collecting' && state && state.ends_at_ms - Date.now() <= URGENT_SECS * 1000) {
+      shown = 'urgent';
+    }
+    // 这个函数跟着 100ms 的倒计时每帧都跑，不挡一下就是每秒重建十次节点。
+    if (shown === shownPhase) return;
+    shownPhase = shown;
+
+    var p = PHASE[shown] || ['—', ''];
+    elPhase.dataset.phase = shown;
+    elPhase.textContent = p[0];
+    var ko = document.createElement('span');
+    ko.className = 'ko';
+    ko.textContent = ' ' + p[1];
+    elPhase.appendChild(ko);
+  }
+
+  // 倒计时在本地算。服务端只给截止时刻，每秒推一次会一跳一跳的。
+  function tickClock() {
+    if (!state) return;
+    if (phase === 'collecting') {
+      var secs = Math.max(0, Math.ceil((state.ends_at_ms - Date.now()) / 1000));
+      elClock.textContent = secs + 's';
+      elClock.style.color = secs <= URGENT_SECS ? 'var(--jeok)' : 'var(--hwang)';
+      paintPhase();
+    } else if (phase === 'locked') {
+      elClock.textContent = '封盘';
+      elClock.style.color = 'var(--baek)';
+    } else if (phase === 'revealed') {
+      elClock.textContent = '公布';
+      elClock.style.color = 'var(--baek)';
+    }
+  }
+
+  function paintAction() {
+    var a = ACTION[phase];
+    if (busy || !a) {
+      btnGo.disabled = true;
+      elGoLbl.textContent = busy ? '处理中…' : '正在连接…';
+      elHint.textContent = busy ? '等这一步走完。' : '连上服务后这个键才会活。';
+    } else {
+      btnGo.disabled = false;
+      elGoLbl.textContent = a.label;
+      elHint.textContent = a.hint;
+    }
+  }
+
+  function toast(msg) {
+    elToast.textContent = msg;
+    elToast.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { elToast.hidden = true; }, 2200);
+  }
+
+  function step() {
+    if (busy || !phase) return;
+    busy = true;
+    paintAction();
+    fetch('/api/continue', { method: 'POST' })
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function (d) {
+        elErr.hidden = true;
+        // 服务端把走完的状态一并回了，直接用，不用再等 SSE 绕一圈——
+        // 那一圈里按键还是活的，连点两下会连走两步。
+        render(d.state);
+        toast(RECEIPT[d.did] || '走了一步');
+      })
+      .catch(function (e) {
+        elErr.textContent = '这一步没走成（' + e.message + '）。检查服务还在不在，然后再按一次。';
+        elErr.hidden = false;
+      })
+      .finally(function () {
+        busy = false;
+        paintAction();
+      });
+  }
+
+  // ---------- 排行榜 ----------
+  function gainMap(s) {
+    var map = {};
+    var list = s.awards || [];
+    for (var i = 0; i < list.length; i++) map[list[i].nickname] = list[i];
+    return map;
+  }
+
+  // 画面页只摆得下前几名，控制台要看全，所以走单独的接口。
+  function loadBoard() {
+    fetch('/api/leaderboard')
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var gains = state ? gainMap(state) : {};
+        elRows.innerHTML = '';
+        elEmpty.hidden = d.rows.length > 0;
+
+        for (var i = 0; i < d.rows.length; i++) {
+          var r = d.rows[i];
+          var li = document.createElement('li');
+          li.className = 'row' + (gains[r.nickname] ? ' hot' : '');
+          li.setAttribute('data-rank', r.rank);
+          li.innerHTML =
+            '<span class="rk">' + r.rank + '</span>' +
+            '<span class="nm"></span>' +
+            '<span class="sub"></span>' +
+            (gains[r.nickname] ? '<span class="gain">+' + gains[r.nickname].gained + '</span>' : '') +
+            '<span class="sc">' + r.score + '</span>';
+          li.querySelector('.nm').textContent = r.nickname;
+          // 连对数比总分更能说明这人稳不稳，所以摆在旁边。
+          li.querySelector('.sub').textContent = '对' + r.correct + '题' +
+            (r.streak >= 2 ? ' · 连' + r.streak : '');
+          elRows.appendChild(li);
+        }
+      })
+      .catch(function () { /* 榜单刷不出来不影响主播按键，静默 */ });
+  }
+
+  // ---------- 被丢掉的弹幕 ----------
+  // 判定太严（真答案被丢）或太松（噪声被收）时，主播靠这个看出来。
+  function loadLog() {
+    fetch('/api/rejections')
+      .then(function (r) { return r.json(); })
+      .then(function (list) {
+        elLog.innerHTML = '';
+        elLogEmp.hidden = list.length > 0;
+
+        for (var i = 0; i < Math.min(40, list.length); i++) {
+          var it = list[i];
+          var li = document.createElement('li');
+          li.innerHTML = '<span class="who"></span><span class="what"></span><span class="why"></span>';
+          li.querySelector('.who').textContent = it.nickname;
+          li.querySelector('.what').textContent = it.content;
+          li.querySelector('.why').textContent = it.reason;
+          // 窄的时候原因会被省略号截掉，鼠标悬停看全的。
+          li.title = it.nickname + '：' + it.content + '  →  ' + it.reason;
+          elLog.appendChild(li);
+        }
+      })
+      .catch(function () { /* 同上，静默 */ });
+  }
+
+  // ---------- 连接 ----------
+  function connect() {
+    if (es) es.close();
+    es = new EventSource('/api/events');
+
+    es.addEventListener('state', function (e) {
+      elErr.hidden = true;
+      render(JSON.parse(e.data));
+      paintAction();
+    });
+
+    es.onerror = function () {
+      // EventSource 自己会重连，这里只把状态显示出来。
+      elErr.textContent = '和服务断开了，正在重连…';
+      elErr.hidden = false;
+    };
+  }
+
+  btnGo.addEventListener('click', step);
+
+  document.addEventListener('keydown', function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    // 日志框里选中文字的时候别抢空格。
+    var t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    if (e.key === ' ' || e.key === 'Spacebar' || e.key === 'Enter') {
+      e.preventDefault();
+      step();
+    }
+  });
+
+  buildOptions();
+  connect();
+  setInterval(tickClock, 100);
+  setInterval(loadBoard, 3000);
+  setInterval(loadLog, 2000);
+  loadBoard();
+  loadLog();
+})();
+</script>
+</body>
+</html>

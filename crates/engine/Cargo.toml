@@ -1,0 +1,13 @@
+[package]
+name = "livestream-engine"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+livestream-core.workspace = true
+
+serde.workspace = true
+unicode-normalization.workspace = true
+
+[dev-dependencies]
+serde_json = "1"

@@ -1,0 +1,903 @@
+
+<title>韩语答题直播间蓝图</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Noto+Sans+KR:wght@400;700&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&display=swap">
+
+<style>
+/* ============================================================
+   韩语答题直播间 · 蓝图 v0.2
+   Layout: single column, 1080px measure; two mechanism figures
+   (round loop, answer pipeline) then the mind map as hero.
+   Palette: 五方色 (오방색) desaturated — 청 indigo / 적 vermilion
+   / 황 ochre / 녹 green / 흑 slate — over a cool paper ground.
+   ============================================================ */
+:root {
+  --bg:          #F4F6F9;
+  --surface:     #FFFFFF;
+  --surface-2:   #EDF0F5;
+  --fg:          #141821;
+  --fg-soft:     #4C5566;
+  --muted:       #77808F;
+  --line:        #D9DEE7;
+  --line-soft:   #E6EAF0;
+
+  --c-blue:      #35569E;  --c-blue-bg:   #E9EEFA;  --c-blue-ln:   #C3D0EC;
+  --c-red:       #AF452C;  --c-red-bg:    #FAEBE6;  --c-red-ln:    #EAC9BE;
+  --c-ochre:     #8E6B15;  --c-ochre-bg:  #F7F0DB;  --c-ochre-ln:  #E3D3A6;
+  --c-green:     #2A6350;  --c-green-bg:  #E5F0EA;  --c-green-ln:  #BFDACD;
+  --c-slate:     #464F60;  --c-slate-bg:  #EBEEF3;  --c-slate-ln:  #CDD4DF;
+
+  --warn:        #B4521C;  --warn-bg:     #FBEEE2;  --warn-ln:     #EFD3B8;
+
+  --f-display: 'Noto Serif SC', 'Noto Sans KR', Georgia, serif;
+  --f-body:    'Noto Sans SC', 'Noto Sans KR', system-ui, -apple-system, sans-serif;
+  --f-mono:    'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --measure: 1080px;
+  --r: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:        #101319;
+    --surface:   #171B23;
+    --surface-2: #1E232C;
+    --fg:        #E8ECF3;
+    --fg-soft:   #AEB7C6;
+    --muted:     #7E8898;
+    --line:      #2C333F;
+    --line-soft: #232A34;
+
+    --c-blue:    #92AEEE;  --c-blue-bg:   #1A2338;  --c-blue-ln:   #2E3E63;
+    --c-red:     #E5947D;  --c-red-bg:    #2E1F1A;  --c-red-ln:    #553228;
+    --c-ochre:   #D6B267;  --c-ochre-bg:  #2A2415;  --c-ochre-ln:  #4E4123;
+    --c-green:   #7CC5A3;  --c-green-bg:  #14261E;  --c-green-ln:  #274536;
+    --c-slate:   #A3AEC0;  --c-slate-bg:  #1C212A;  --c-slate-ln:  #333B48;
+
+    --warn:      #E09A5F;  --warn-bg:     #2C2013;  --warn-ln:     #52391D;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg:        #101319;
+  --surface:   #171B23;
+  --surface-2: #1E232C;
+  --fg:        #E8ECF3;
+  --fg-soft:   #AEB7C6;
+  --muted:     #7E8898;
+  --line:      #2C333F;
+  --line-soft: #232A34;
+
+  --c-blue:    #92AEEE;  --c-blue-bg:   #1A2338;  --c-blue-ln:   #2E3E63;
+  --c-red:     #E5947D;  --c-red-bg:    #2E1F1A;  --c-red-ln:    #553228;
+  --c-ochre:   #D6B267;  --c-ochre-bg:  #2A2415;  --c-ochre-ln:  #4E4123;
+  --c-green:   #7CC5A3;  --c-green-bg:  #14261E;  --c-green-ln:  #274536;
+  --c-slate:   #A3AEC0;  --c-slate-bg:  #1C212A;  --c-slate-ln:  #333B48;
+
+  --warn:      #E09A5F;  --warn-bg:     #2C2013;  --warn-ln:     #52391D;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--f-body);
+  font-size: 16px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap {
+  max-width: var(--measure);
+  margin-inline: auto;
+  padding-inline: 24px;
+  padding-block: 56px 96px;
+}
+
+/* ---------- masthead ---------- */
+.masthead { display: flex; flex-direction: column; gap: 18px; padding-bottom: 30px; border-bottom: 1px solid var(--line); }
+.eyebrow {
+  font-family: var(--f-mono);
+  font-size: 12px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+h1 {
+  font-family: var(--f-display);
+  font-weight: 700;
+  font-size: clamp(30px, 5.2vw, 46px);
+  line-height: 1.18;
+  letter-spacing: -0.01em;
+  margin: 0;
+  text-wrap: balance;
+}
+.standfirst { font-size: 17px; color: var(--fg-soft); max-width: 62ch; margin: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font-family: var(--f-mono);
+  font-size: 12px;
+  padding: 4px 11px;
+  border: 1px solid var(--line);
+  border-radius: 100px;
+  color: var(--fg-soft);
+  background: var(--surface);
+}
+
+/* ---------- sections ---------- */
+section { margin-top: 56px; }
+h2 {
+  font-family: var(--f-display);
+  font-weight: 600;
+  font-size: clamp(21px, 3vw, 27px);
+  line-height: 1.3;
+  margin: 0 0 6px;
+  letter-spacing: -0.005em;
+  text-wrap: balance;
+}
+.sec-note { color: var(--fg-soft); font-size: 15px; margin: 0 0 24px; max-width: 66ch; }
+
+/* ---------- decided ---------- */
+.decided {
+  margin-top: 34px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(238px, 1fr));
+  gap: 12px;
+}
+.dec {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.dec-k {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--c-green);
+  font-weight: 500;
+}
+.dec-v { font-size: 15.5px; font-weight: 700; line-height: 1.4; }
+.dec-n { font-size: 13.5px; color: var(--muted); line-height: 1.55; }
+
+/* ---------- blocking questions ---------- */
+.blockers {
+  margin-top: 44px;
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-ln);
+  border-radius: var(--r);
+  padding: 26px 26px 20px;
+}
+.blockers h2 { font-size: 20px; margin: 0 0 4px; color: var(--fg); }
+.blockers .sub { margin: 0 0 20px; font-size: 14.5px; color: var(--fg-soft); max-width: 68ch; }
+.blist { display: flex; flex-direction: column; gap: 0; }
+.b {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 14px;
+  padding: 13px 0;
+  border-top: 1px solid color-mix(in srgb, var(--warn) 22%, transparent);
+}
+.b:first-child { border-top: none; padding-top: 0; }
+.b:last-child { padding-bottom: 0; }
+.b-n {
+  font-family: var(--f-mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--warn);
+  padding-top: 3px;
+}
+.b-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.b-body strong { font-size: 15.5px; font-weight: 700; }
+.b-body span { font-size: 14.5px; color: var(--fg-soft); }
+.b-body code {
+  font-family: var(--f-mono);
+  font-size: 13px;
+  background: color-mix(in srgb, var(--warn) 13%, transparent);
+  padding: 1px 6px;
+  border-radius: 5px;
+  color: var(--fg);
+}
+.b-fatal { color: var(--c-red); font-weight: 700; }
+
+/* ---------- figures ---------- */
+figure { margin: 0; }
+.figscroll { overflow-x: auto; padding-bottom: 6px; }
+.figscroll svg { display: block; max-width: 100%; height: auto; min-width: 580px; }
+figcaption {
+  margin-top: 14px;
+  font-size: 14px;
+  color: var(--muted);
+  max-width: 70ch;
+  line-height: 1.6;
+}
+.svg-box   { fill: var(--surface); stroke: var(--line); }
+.svg-label { fill: var(--fg); font-family: var(--f-body); font-size: 15px; font-weight: 500; }
+.svg-sub   { fill: var(--muted); font-family: var(--f-mono); font-size: 11.5px; }
+.svg-wire  { stroke: var(--muted); stroke-width: 1.4; fill: none; }
+.svg-hi    { fill: var(--c-blue-bg); stroke: var(--c-blue-ln); }
+.svg-hi-t  { fill: var(--c-blue); font-family: var(--f-body); font-size: 15px; font-weight: 700; }
+.svg-ok    { fill: var(--c-green-bg); stroke: var(--c-green-ln); }
+.svg-ok-t  { fill: var(--c-green); font-family: var(--f-body); font-size: 14px; font-weight: 700; }
+.svg-warn  { fill: var(--warn-bg); stroke: var(--warn-ln); }
+.svg-warn-t{ fill: var(--warn); font-family: var(--f-body); font-size: 14px; font-weight: 700; }
+.svg-cap   { fill: var(--muted); font-family: var(--f-body); font-size: 12.5px; }
+.svg-code  { font-family: var(--f-mono); font-size: 15px; font-weight: 500; }
+
+/* ---------- mind map ---------- */
+.mapframe {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 28px 26px;
+  overflow-x: auto;
+}
+.tree, .tree ul { list-style: none; margin: 0; padding: 0; }
+.tree ul { display: flex; flex-direction: column; justify-content: center; }
+.tree li {
+  display: flex;
+  align-items: center;
+  position: relative;
+  padding-left: 22px;
+  padding-block: 6px;
+}
+.tree > li { padding-left: 0; }
+.tree > li::before, .tree > li::after { display: none; }
+
+.tree li::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; height: 100%;
+  border-left: 1.5px solid var(--line);
+  border-left-color: color-mix(in srgb, var(--c, var(--line)) 38%, var(--line));
+}
+.tree li:first-child::before { top: 50%; height: 50%; }
+.tree li:last-child::before  { height: 50%; }
+.tree li:only-child::before  { display: none; }
+.tree li::after {
+  content: '';
+  position: absolute;
+  left: 0; top: calc(50% - 1px);
+  width: 22px;
+  border-top: 1.5px solid var(--line);
+  border-top-color: color-mix(in srgb, var(--c, var(--line)) 38%, var(--line));
+}
+
+.n {
+  font-size: 14.5px;
+  line-height: 1.45;
+  border-radius: 8px;
+  padding: 5px 13px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--fg-soft);
+  max-width: 400px;
+}
+.tree li > ul { margin-left: 26px; }
+
+.n-root {
+  font-family: var(--f-display);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  padding: 14px 22px;
+  color: var(--bg);
+  background: var(--fg);
+  border-color: var(--fg);
+  white-space: nowrap;
+}
+.n-branch {
+  font-weight: 700;
+  font-size: 15px;
+  padding: 7px 15px;
+  white-space: nowrap;
+  color: var(--c);
+  background: var(--cbg);
+  border-color: var(--cln);
+}
+.n-branch .num {
+  font-family: var(--f-mono);
+  font-size: 11.5px;
+  font-weight: 500;
+  opacity: .62;
+  margin-right: 7px;
+}
+.n-leaf code {
+  font-family: var(--f-mono);
+  font-size: 12.5px;
+  background: var(--surface-2);
+  padding: 0.5px 5px;
+  border-radius: 4px;
+  color: var(--fg-soft);
+}
+.n-flag {
+  display: inline-block;
+  font-family: var(--f-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: .06em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-left: 7px;
+  vertical-align: 1.5px;
+  background: var(--warn-bg);
+  color: var(--warn);
+  border: 1px solid var(--warn-ln);
+}
+.n-fixed { background: var(--c-green-bg); color: var(--c-green); border-color: var(--c-green-ln); }
+.n-tbd   { background: var(--c-slate-bg); color: var(--c-slate); border-color: var(--c-slate-ln); }
+
+.b-blue  { --c: var(--c-blue);  --cbg: var(--c-blue-bg);  --cln: var(--c-blue-ln);  }
+.b-red   { --c: var(--c-red);   --cbg: var(--c-red-bg);   --cln: var(--c-red-ln);   }
+.b-ochre { --c: var(--c-ochre); --cbg: var(--c-ochre-bg); --cln: var(--c-ochre-ln); }
+.b-green { --c: var(--c-green); --cbg: var(--c-green-bg); --cln: var(--c-green-ln); }
+.b-slate { --c: var(--c-slate); --cbg: var(--c-slate-bg); --cln: var(--c-slate-ln); }
+
+/* ---------- timeline ---------- */
+.tl { display: flex; flex-direction: column; gap: 8px; margin-bottom: 30px; }
+.tlrow {
+  display: grid;
+  grid-template-columns: 178px 1fr auto;
+  gap: 18px;
+  align-items: baseline;
+  padding: 12px 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.tlrow.crit { border-color: var(--c-red-ln); background: var(--c-red-bg); }
+.tlrow.fast { border-color: var(--c-green-ln); background: var(--c-green-bg); }
+.tl-k { font-size: 14.5px; font-weight: 700; }
+.tlrow.crit .tl-k { color: var(--c-red); }
+.tlrow.fast .tl-k { color: var(--c-green); }
+.tl-n { font-size: 14px; color: var(--fg-soft); }
+.tl-n code {
+  font-family: var(--f-mono);
+  font-size: 12.5px;
+  background: var(--surface-2);
+  padding: 0.5px 5px;
+  border-radius: 4px;
+}
+.tlrow.crit .tl-n code { background: color-mix(in srgb, var(--c-red) 10%, var(--surface)); }
+.tlrow.fast .tl-n code { background: color-mix(in srgb, var(--c-green) 10%, var(--surface)); }
+.tl-t {
+  font-family: var(--f-mono);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.tlrow.crit .tl-t { color: var(--c-red); }
+.tlrow.fast .tl-t { color: var(--c-green); }
+
+/* ---------- milestones ---------- */
+.miles { display: flex; flex-direction: column; gap: 10px; }
+.mile {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 16px;
+  align-items: start;
+  padding: 15px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface);
+}
+.mile.now { border-color: var(--c-blue-ln); background: var(--c-blue-bg); }
+.mile.par { border-color: var(--c-green-ln); background: var(--c-green-bg); }
+.mile-tag {
+  font-family: var(--f-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: .06em;
+  color: var(--muted);
+  padding-top: 2px;
+  white-space: nowrap;
+}
+.mile.now .mile-tag { color: var(--c-blue); }
+.mile.par .mile-tag { color: var(--c-green); }
+.mile-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.mile-body strong { font-size: 15.5px; font-weight: 700; }
+.mile-body span { font-size: 14px; color: var(--fg-soft); }
+.mile-body code {
+  font-family: var(--f-mono);
+  font-size: 12.5px;
+  background: var(--surface-2);
+  padding: 0.5px 5px;
+  border-radius: 4px;
+}
+.mile.now .mile-body code { background: color-mix(in srgb, var(--c-blue) 10%, var(--surface)); }
+.mile.par .mile-body code { background: color-mix(in srgb, var(--c-green) 10%, var(--surface)); }
+
+footer {
+  margin-top: 64px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+  font-size: 13.5px;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+a { color: var(--c-blue); text-underline-offset: 3px; }
+:focus-visible { outline: 2px solid var(--c-blue); outline-offset: 2px; border-radius: 3px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
+
+/* ---------- phone: mind map becomes an outline ---------- */
+@media (max-width: 780px) {
+  .wrap { padding-inline: 18px; padding-block: 36px 72px; }
+  section { margin-top: 44px; }
+  .mapframe { padding: 18px 16px; }
+  .tree li { display: block; padding-left: 14px; padding-block: 0; margin-bottom: 6px; }
+  .tree > li { padding-left: 0; }
+  .tree li::before, .tree li::after { display: none; }
+  .tree ul { justify-content: flex-start; }
+  .tree li > ul { margin-left: 10px; border-left: 1.5px solid var(--cln, var(--line)); padding-left: 12px; }
+  .tree > li > ul { margin-left: 0; border-left: none; padding-left: 0; }
+  .n { display: block; max-width: none; }
+  .n-root { display: inline-block; white-space: normal; }
+  .blockers { padding: 20px 18px 16px; }
+  .tlrow { grid-template-columns: 1fr; gap: 4px; }
+  .tl-t { justify-self: start; }
+}
+</style>
+<!-- ============================================================
+     存档标记（2026-10-01 加）：这份蓝图描述的「官方直播小玩法 OpenAPI +
+     关键词订阅」路线**已经放弃**，不要再照着它动手。保留它是因为里面的
+     调研（关键词能不能配单字母、官方题库是否必选）仍有参考价值。
+
+     实际做法见项目根目录的 README.md，两处关键差别：
+       1. 弹幕不走官方接口，而是本地转发工具的 WebSocket（DANMAKU_WS）。
+       2. 画面是自己写的网页（OBS 浏览器源），不是官方小玩法容器。
+     ============================================================ -->
+<div style="max-width:1080px;margin:0 auto 28px;padding:16px 20px;border:1px solid #EFD3B8;border-left:4px solid #B4521C;border-radius:10px;background:#FBEEE2;color:#141821;font:400 15px/1.7 'Noto Sans SC','Noto Sans KR',system-ui,sans-serif">
+  <strong style="color:#B4521C">存档 · 已废弃路线。</strong>
+  这份蓝图设计的是「官方直播小玩法 OpenAPI + 关键词订阅」的接入方式，项目后来没有走这条路。
+  实际做法见根目录的 <code style="font-family:'JetBrains Mono',monospace;font-size:13px">README.md</code>：
+  弹幕改走本地转发工具的 WebSocket，画面是自己写的网页，挂在 OBS 浏览器源上。
+  文中的调研部分仍有参考价值，<strong>但接入方案不要再照此实施</strong>。
+</div>
+
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="eyebrow">Blueprint · v0.2 · 已定方向</div>
+    <h1>韩语答题直播间</h1>
+    <p class="standfirst">
+      抖音直播，主播出韩语四选一选择题，观众在评论区发选项字母，倒计时结束公布答案。
+      走官方直播小玩法接口，关键词订阅模式。这份图记录了已定的决策、动手前必须先问清楚的五件事，以及八条主干的完整设计。
+    </p>
+    <div class="chips">
+      <span class="chip">官方直播小玩法 OpenAPI</span>
+      <span class="chip">关键词 abcdABCD</span>
+      <span class="chip">四选一选择题</span>
+      <span class="chip">Rust</span>
+    </div>
+  </header>
+
+  <div class="decided">
+    <div class="dec">
+      <div class="dec-k">已定 · 题型</div>
+      <div class="dec-v">四选一选择题</div>
+      <div class="dec-n">不做填空题。判定对象是选项字母，不是韩文内容。</div>
+    </div>
+    <div class="dec">
+      <div class="dec-k">已定 · 关键词</div>
+      <div class="dec-v">a b c d A B C D</div>
+      <div class="dec-n">8 个，占 10 个配额。大小写各配一套，避免依赖平台的大小写行为。</div>
+    </div>
+    <div class="dec">
+      <div class="dec-k">已定 · 接入</div>
+      <div class="dec-v">官方接口</div>
+      <div class="dec-n">只做关键词订阅，不收全量弹幕。</div>
+    </div>
+    <div class="dec">
+      <div class="dec-k">已定 · 合规</div>
+      <div class="dec-v">全程只跑服务</div>
+      <div class="dec-n">不带货，不使用韩剧台词／歌词／受版权保护的图片。</div>
+    </div>
+  </div>
+
+  <div class="blockers">
+    <h2>动手前必须先问运营的五个问题</h2>
+    <p class="sub">
+      这五个都是 go / no-go，答案不同会导致架构和排期完全不同。建议在写第一行代码之前，带着这五个具体问题去联系抖音开放平台的对接运营。
+    </p>
+    <div class="blist">
+      <div class="b">
+        <div class="b-n">01</div>
+        <div class="b-body">
+          <strong>关键词能配单个字母吗？</strong>
+          <span>官方文档里的关键词示例都是 <code>123</code>、<code>攻击</code> 这类多字符指令。单字母 <code>a</code> 是非常规用法，可能有最短长度限制，或被审核判定为无意义配置。<span class="b-fatal">这条不过，整个方案要重做。</span></span>
+        </div>
+      </div>
+      <div class="b">
+        <div class="b-n">02</div>
+        <div class="b-body">
+          <strong>关键词是随包体固定的，还是后台能随时改？</strong>
+          <span>如果是随包体提交审核后固定，那 8 个关键词一旦上线就永久绑定，题目必须全部围绕 ABCD 设计。如果有后台可热改，就多一条退路。</span>
+        </div>
+      </div>
+      <div class="b">
+        <div class="b-n">03</div>
+        <div class="b-body">
+          <strong>「官方题库必选」是必须用官方题库，还是「要用才申请」？</strong>
+          <span>官方文档里答题类玩法标注了「直播玩法官方题库」为必选能力。如果被理解成答题玩法必须跑官方题库，那自定义韩语题就不成立。<span class="b-fatal">这是第二大阻塞点。</span></span>
+        </div>
+      </div>
+      <div class="b">
+        <div class="b-n">04</div>
+        <div class="b-body">
+          <strong>直播形态必须是小玩法客户端 exe 吗？还能用 OBS 吗？</strong>
+          <span>能力清单里有「玩法客户端（exe）」为必选，数据流是「推送到开发者服务器 → 客户端展示效果」。这意味着画面可能必须由小玩法窗口渲染，而不是你自由搭的 OBS 场景，而且可能需要一台公网服务器。<span class="b-fatal">这决定了呈现层是写 HTML 还是写桌面窗口。</span></span>
+        </div>
+      </div>
+      <div class="b">
+        <div class="b-n">05</div>
+        <div class="b-body">
+          <strong>关键词匹配区分大小写吗？</strong>
+          <span>如果不区分，<code>a</code> 和 <code>A</code> 只占 1 个配额，8 个关键词可以压缩成 4 个，省下的配额留给「不会」「跳过」这类辅助指令。如果区分，就维持 8 个。</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section>
+    <h2>核心闭环</h2>
+    <p class="sec-note">
+      一场直播就是无限循环这五步。主播只控两个动作：开题、公布，其余自动。
+    </p>
+    <figure>
+      <div class="figscroll">
+        <svg viewBox="0 0 920 236" role="img" aria-label="答题轮次状态机：出题 → 开放收答 60 秒 → 封盘 → 公布答案 → 计分落库，然后回到出题；弹幕源全量入队，仅在开放收答状态被消费">
+          <defs>
+            <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" color="var(--muted)"/>
+            </marker>
+            <marker id="ar-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" color="var(--c-blue)"/>
+            </marker>
+          </defs>
+
+          <path d="M 845 58 V 22 H 80 V 58" class="svg-wire" marker-end="url(#ar)"/>
+          <text x="462" y="15" class="svg-sub" text-anchor="middle">下一题</text>
+
+          <rect x="12" y="58" width="156" height="58" rx="8" class="svg-box"/>
+          <text x="90" y="93" class="svg-label" text-anchor="middle">出题</text>
+
+          <rect x="200" y="58" width="176" height="58" rx="8" class="svg-hi"/>
+          <text x="288" y="86" class="svg-hi-t" text-anchor="middle">开放收答</text>
+          <text x="288" y="104" class="svg-sub" text-anchor="middle" fill="currentColor" color="var(--c-blue)">倒计时 60s</text>
+
+          <rect x="408" y="58" width="140" height="58" rx="8" class="svg-box"/>
+          <text x="478" y="93" class="svg-label" text-anchor="middle">封盘</text>
+
+          <rect x="580" y="58" width="156" height="58" rx="8" class="svg-box"/>
+          <text x="658" y="93" class="svg-label" text-anchor="middle">公布 + 讲解</text>
+
+          <rect x="768" y="58" width="140" height="58" rx="8" class="svg-box"/>
+          <text x="838" y="93" class="svg-label" text-anchor="middle">计分落库</text>
+
+          <line x1="168" y1="87" x2="198" y2="87" class="svg-wire" marker-end="url(#ar)"/>
+          <line x1="376" y1="87" x2="406" y2="87" class="svg-wire" marker-end="url(#ar)"/>
+          <line x1="548" y1="87" x2="578" y2="87" class="svg-wire" marker-end="url(#ar)"/>
+          <line x1="736" y1="87" x2="766" y2="87" class="svg-wire" marker-end="url(#ar)"/>
+
+          <line x1="288" y1="168" x2="288" y2="120" class="svg-wire" stroke-dasharray="4 3" marker-end="url(#ar-blue)"/>
+          <rect x="196" y="168" width="184" height="42" rx="8" class="svg-hi"/>
+          <text x="288" y="194" class="svg-hi-t" text-anchor="middle" font-size="14">弹幕推送 · 持续到达</text>
+          <text x="400" y="186" class="svg-cap">命中关键词的弹幕一直推过来，</text>
+          <text x="400" y="204" class="svg-cap">只在「开放收答」窗口内被消费——这就是封盘。</text>
+        </svg>
+      </div>
+      <figcaption>
+        封盘 = 停止消费队列，不是断开推送。推送一直在，engine 决定什么时候看它。
+        公布之后写入 SQLite，下一题时正确答案来自本地题库。
+      </figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>答案判定流水线</h2>
+    <p class="sec-note">
+      关键词是模糊匹配，所以官方推给你的远不止答案。判定必须在本地做，而且要严格。
+    </p>
+    <figure>
+      <div class="figscroll">
+        <svg viewBox="0 0 960 300" role="img" aria-label="答案判定流水线：弹幕文本经 NFC 归一化、去空白、转大写后，提取其中所有 A 到 D 字符；只有恰好一个字符时才计为有效作答，两个以上一律丢弃">
+          <defs>
+            <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" color="var(--muted)"/>
+            </marker>
+          </defs>
+
+          <!-- column headers -->
+          <text x="76"  y="34" class="svg-sub" text-anchor="middle" letter-spacing="0.08em">弹幕原文</text>
+          <text x="266" y="34" class="svg-sub" text-anchor="middle" letter-spacing="0.08em">NFKC · 去空白 · 转大写</text>
+          <text x="471" y="34" class="svg-sub" text-anchor="middle" letter-spacing="0.08em">提取 A–D</text>
+          <text x="651" y="34" class="svg-sub" text-anchor="middle" letter-spacing="0.08em">长度 = 1 ?</text>
+          <text x="846" y="34" class="svg-sub" text-anchor="middle" letter-spacing="0.08em">结果</text>
+
+          <!-- lane 1 : accepted -->
+          <rect x="16"  y="52" width="120" height="52" rx="8" class="svg-box"/>
+          <text x="76"  y="85" class="svg-code" text-anchor="middle" fill="currentColor" color="var(--fg)">Ｂ</text>
+
+          <rect x="176" y="52" width="180" height="52" rx="8" class="svg-box"/>
+          <text x="266" y="85" class="svg-code" text-anchor="middle" fill="currentColor" color="var(--fg)">B</text>
+
+          <rect x="396" y="52" width="150" height="52" rx="8" class="svg-box"/>
+          <text x="471" y="85" class="svg-code" text-anchor="middle" fill="currentColor" color="var(--fg)">B</text>
+
+          <rect x="586" y="52" width="130" height="52" rx="8" class="svg-hi"/>
+          <text x="651" y="84" class="svg-hi-t" text-anchor="middle" font-size="14">恰好 1 个</text>
+
+          <rect x="756" y="52" width="180" height="52" rx="8" class="svg-ok"/>
+          <text x="846" y="84" class="svg-ok-t" text-anchor="middle">计为选 B</text>
+
+          <line x1="136" y1="78" x2="174" y2="78" class="svg-wire" marker-end="url(#ar3)"/>
+          <line x1="356" y1="78" x2="394" y2="78" class="svg-wire" marker-end="url(#ar3)"/>
+          <line x1="546" y1="78" x2="584" y2="78" class="svg-wire" marker-end="url(#ar3)"/>
+          <line x1="716" y1="78" x2="754" y2="78" class="svg-wire" marker-end="url(#ar3)"/>
+
+          <!-- lane 2 : rejected -->
+          <rect x="16"  y="170" width="120" height="52" rx="8" class="svg-box"/>
+          <text x="76"  y="203" class="svg-code" text-anchor="middle" fill="currentColor" color="var(--fg)">haha</text>
+
+          <rect x="176" y="170" width="180" height="52" rx="8" class="svg-box"/>
+          <text x="266" y="203" class="svg-code" text-anchor="middle" fill="currentColor" color="var(--fg)">HAHA</text>
+
+          <rect x="396" y="170" width="150" height="52" rx="8" class="svg-box"/>
+          <text x="471" y="203" class="svg-code" text-anchor="middle" fill="currentColor" color="var(--fg)">AA</text>
+
+          <rect x="586" y="170" width="130" height="52" rx="8" class="svg-warn"/>
+          <text x="651" y="202" class="svg-warn-t" text-anchor="middle" font-size="14">2 个</text>
+
+          <rect x="756" y="170" width="180" height="52" rx="8" class="svg-warn"/>
+          <text x="846" y="202" class="svg-warn-t" text-anchor="middle">丢弃 · 记疑似日志</text>
+
+          <line x1="136" y1="196" x2="174" y2="196" class="svg-wire" marker-end="url(#ar3)"/>
+          <line x1="356" y1="196" x2="394" y2="196" class="svg-wire" marker-end="url(#ar3)"/>
+          <line x1="546" y1="196" x2="584" y2="196" class="svg-wire" marker-end="url(#ar3)"/>
+          <line x1="716" y1="196" x2="754" y2="196" class="svg-wire" marker-end="url(#ar3)"/>
+
+          <text x="16" y="262" class="svg-cap">上行：全角 Ｂ 也能正确识别——中文输入法很容易打出全角字母。</text>
+          <text x="16" y="284" class="svg-cap">下行：haha 命中关键词 a，但提取出两个字母，直接丢掉。这是模糊匹配最主要的误触发来源。</text>
+        </svg>
+      </div>
+      <figcaption>
+        规则只有一条：把弹幕里所有 A–D 字符抽出来，恰好剩一个才算有效作答。
+        「我选B」「选a」「A吧」都能正确识别；「haha」「打卡」「666」自动被挡掉。
+      </figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>思维导图</h2>
+    <p class="sec-note">
+      八条主干。<span class="n-flag n-fixed">已定</span> 是这次敲定的，
+      <span class="n-flag">风险</span> 是待确认或需重点处理的，
+      <span class="n-flag n-tbd">待定</span> 是答案还没出来的。
+    </p>
+    <div class="mapframe">
+      <ul class="tree">
+        <li>
+          <div class="n n-root">韩语答题直播间</div>
+          <ul>
+
+            <li class="b-red">
+              <div class="n n-branch"><span class="num">01</span>玩法设计</div>
+              <ul>
+                <li><div class="n n-leaf">题型 · 四选一<span class="n-flag n-fixed">已定</span>：中→韩 / 韩→中 / 语法选择 / 敬语辨析 / TOPIK 词汇</div></li>
+                <li><div class="n n-leaf">节奏 · 出题 30s → 收答 60s → 封盘 → 公布+讲解 30s</div></li>
+                <li><div class="n n-leaf">激励 · 答对榜 / 连对 streak / 选项分布图</div></li>
+                <li><div class="n n-leaf">场次 · 每日一词 / 敬语专场 / 初级·中高级分场</div></li>
+                <li><div class="n n-leaf">选项文案要短 · 韩文一长，1080p 下排版必挤</div></li>
+              </ul>
+            </li>
+
+            <li class="b-blue">
+              <div class="n n-branch"><span class="num">02</span>弹幕接入<span class="n-flag">风险</span></div>
+              <ul>
+                <li><div class="n n-leaf">官方直播小玩法 OpenAPI<span class="n-flag n-fixed">已定</span> · WebSocket 推送</div></li>
+                <li><div class="n n-leaf">鉴权 · Client Key + Secret，access_token 2 小时过期，须自动刷新</div></li>
+                <li><div class="n n-leaf">关键词 · <code>a b c d A B C D</code>，模糊匹配（substring）</div></li>
+                <li><div class="n n-leaf">只申请评论互动数据，礼物/点赞用不上</div></li>
+                <li><div class="n n-leaf">健壮性 · 断线重连 / 心跳保活 / 消息去重 / token 刷新失败要报警</div></li>
+                <li><div class="n n-leaf">抽象成 <code>DanmakuSource</code> trait，本地 mock 源用于离线开发</div></li>
+              </ul>
+            </li>
+
+            <li class="b-ochre">
+              <div class="n n-branch"><span class="num">03</span>答案判定<span class="n-flag n-fixed">已简化</span></div>
+              <ul>
+                <li><div class="n n-leaf">NFKC 归一化 · 全角 Ａ → 半角 A，中文输入法常出全角</div></li>
+                <li><div class="n n-leaf">去空白 / 零宽字符，转大写</div></li>
+                <li><div class="n n-leaf">提取全部 A–D 字符，<strong>长度必须恰好为 1</strong></div></li>
+                <li><div class="n n-leaf">多字母一律丢弃，不猜——猜错的代价高于漏掉</div></li>
+                <li><div class="n n-leaf">被丢弃的弹幕进「疑似」日志，控制台可回看调优</div></li>
+                <li><div class="n n-leaf">正确答案由本地题库决定，判定层不认识韩文</div></li>
+                <li><div class="n n-leaf">韩文 NFC/NFD 只在题库导入时清洗一次，不再影响运行时</div></li>
+              </ul>
+            </li>
+
+            <li class="b-slate">
+              <div class="n n-branch"><span class="num">04</span>Rust 架构</div>
+              <ul>
+                <li><div class="n n-leaf"><code>core</code> · 题目 / 选项 / 作答 / 轮次，纯逻辑无 IO，可单测</div></li>
+                <li><div class="n n-leaf"><code>danmaku</code> · <code>DanmakuSource</code> trait + 官方实现 + mock 实现</div></li>
+                <li><div class="n n-leaf"><code>engine</code> · 轮次状态机 / 判定流水线 / 计分</div></li>
+                <li><div class="n n-leaf"><code>store</code> · SQLite：题库 + 每轮结果 + 疑似日志</div></li>
+                <li><div class="n n-leaf"><code>web</code> · axum：overlay 页 + SSE 推送 + 控制台 API</div></li>
+                <li><div class="n n-leaf">依赖 · tokio / axum / serde / tokio-tungstenite / sqlx / unicode-normalization</div></li>
+              </ul>
+            </li>
+
+            <li class="b-green">
+              <div class="n n-branch"><span class="num">05</span>呈现层<span class="n-flag n-tbd">待定</span></div>
+              <ul>
+                <li><div class="n n-leaf">形态取决于「必问 04」<span class="n-flag">阻塞</span> · OBS 浏览器源 vs 小玩法 exe 窗口</div></li>
+                <li><div class="n n-leaf">若是 OBS · 浏览器源加载 <code>127.0.0.1:PORT/overlay</code>，透明背景</div></li>
+                <li><div class="n n-leaf">若是 exe · Rust 桌面窗口 + 内嵌 webview，复用同一套 HTML</div></li>
+                <li><div class="n n-leaf">画面 · 题目大字 / 选项四宫格 / 倒计时环 / 答对滚动条</div></li>
+                <li><div class="n n-leaf"><strong>答对即时反馈</strong> · 判定成功立刻滚动显示「昵称 选了 B」，这是留人的关键</div></li>
+                <li><div class="n n-leaf">韩文字体 Noto Sans KR，1080p 下不糊不挤</div></li>
+                <li><div class="n n-leaf">断线自动重连 + 「连接中」兜底画面</div></li>
+              </ul>
+            </li>
+
+            <li class="b-green">
+              <div class="n n-branch"><span class="num">06</span>主播控制台</div>
+              <ul>
+                <li><div class="n n-leaf">出题 / 封盘 / 公布 / 跳过 / 手改判定</div></li>
+                <li><div class="n n-leaf">快捷键 + 脚踏板 · 主播手上正在写字</div></li>
+                <li><div class="n n-leaf">题库 · CSV/JSON 导入，标签 + 难度 + 答案二次确认</div></li>
+                <li><div class="n n-leaf">实时判定流 · 看到每条弹幕被判成了什么，含被丢弃的</div></li>
+                <li><div class="n n-leaf">开播自检 · 弹幕连通 / token 有效 / 字体加载</div></li>
+              </ul>
+            </li>
+
+            <li class="b-slate">
+              <div class="n n-branch"><span class="num">07</span>数据复盘</div>
+              <ul>
+                <li><div class="n n-leaf">选项分布 · 四个选项各自都是关键词，所以票数拿得到</div></li>
+                <li><div class="n n-leaf">参与人数 = 四个选项弹幕的去重人数之和</div></li>
+                <li><div class="n n-leaf">答对率 / 答对榜 / 连对 streak</div></li>
+                <li><div class="n n-leaf">「最快答对」受推送延迟影响，只做娱乐展示，不作抽奖依据</div></li>
+                <li><div class="n n-leaf">卡点题 · 正确率长期偏低的题回炉</div></li>
+              </ul>
+            </li>
+
+            <li class="b-red">
+              <div class="n n-branch"><span class="num">08</span>合规风控</div>
+              <ul>
+                <li><div class="n n-leaf">全程只跑服务，不带货<span class="n-flag n-fixed">已定</span></div></li>
+                <li><div class="n n-leaf">题库自建，不使用韩剧台词 / 歌词 / 受版权保护的图片<span class="n-flag n-fixed">已定</span></div></li>
+                <li><div class="n n-leaf">关键词不可触碰官方规避词表</div></li>
+                <li><div class="n n-leaf">开发者资质 · 认证 + 软著（不能是 APP/游戏类）</div></li>
+                <li><div class="n n-leaf">不给「答对」设物质奖励，避免触发抽奖规范</div></li>
+              </ul>
+            </li>
+
+          </ul>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>资质时间线</h2>
+    <p class="sec-note">
+      短则 4–6 周，长则 3–4 个月。差额几乎全在软著和提案审核上。以下为第三方整理与开发者经验，官方未公开承诺时限。
+    </p>
+    <div class="tl">
+      <div class="tlrow fast">
+        <div class="tl-k">开发者主体认证</div>
+        <div class="tl-n">个人身份证或企业营业执照，平台一般在此期限内完成</div>
+        <div class="tl-t">5 个工作日</div>
+      </div>
+      <div class="tlrow fast">
+        <div class="tl-k">创建应用 · 拿 APPID</div>
+        <div class="tl-n">主体认证通过后即时创建</div>
+        <div class="tl-t">即时</div>
+      </div>
+      <div class="tlrow crit">
+        <div class="tl-k">软著登记<span class="n-flag">关键路径</span></div>
+        <div class="tl-n">
+          普通申请官方规定受理后 30 个工作日，实际 30–60；<strong>材料补正一次顺延 30 个工作日</strong>。
+          加急需付费且要有合理事由。<strong>软著名称必须与玩法名称一致——先想好玩法名再申请。</strong>
+        </div>
+        <div class="tl-t">3 天 – 3 个月</div>
+      </div>
+      <div class="tlrow crit">
+        <div class="tl-k">玩法提案审核</div>
+        <div class="tl-n">
+          无公开时限。<strong>评估前需要先有可演示的 demo 并提交互动截图</strong>，所以 M0 的 mock 版本就是提案材料，不是练手。
+        </div>
+        <div class="tl-t">约 1 个月</div>
+      </div>
+      <div class="tlrow fast">
+        <div class="tl-k">接口能力申请</div>
+        <div class="tl-n">提案通过后按需申请「直播间评论互动数据」</div>
+        <div class="tl-t">1–2 个工作日</div>
+      </div>
+      <div class="tlrow fast">
+        <div class="tl-k">测试白名单</div>
+        <div class="tl-n">
+          提案通过后<strong>后台自助配置</strong>，无需填表，不受千粉账号限制，每玩法最多 3 个测试账号。
+          这是第一次能拿到真实弹幕的时点，远早于正式上线。
+        </div>
+        <div class="tl-t">自助 · 即时</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>落地顺序</h2>
+    <p class="sec-note">
+      关键变化：资质是一条长线，所以本地开发和资质申请必须并行，不能串行。真正依赖官方接口的只有最后一层 WebSocket 接入。
+    </p>
+    <div class="miles">
+      <div class="mile now">
+        <div class="mile-tag">M0 · 现在</div>
+        <div class="mile-body">
+          <strong>骨架 + mock 弹幕源 + 判定流水线</strong>
+          <span>workspace 拆分，<code>MockSource</code> 按剧本吐弹幕（含 <code>Ｂ</code>、<code>haha</code>、「我选B」这些边界样本），
+          overlay 页能看到题目、四宫格选项、倒计时、答对滚动条。全程不碰抖音，先把判定和画面做对。</span>
+        </div>
+      </div>
+      <div class="mile par">
+        <div class="mile-tag">M0 ∥ 并行</div>
+        <div class="mile-body">
+          <strong>启动资质与对接</strong>
+          <span>先带「必问 01」联系运营确认单字母关键词能否配置——这一条不过，后面全部作废。
+          确认可行后，立刻定玩法名并申请软著（可考虑加急），这条线最长且完全在你控制之外。</span>
+        </div>
+      </div>
+      <div class="mile">
+        <div class="mile-tag">M1</div>
+        <div class="mile-body">
+          <strong>题库 + 计分 + 落库</strong>
+          <span>导入 200 条 TOPIK 初级题，答案二次确认；实现轮次状态机、答对榜、连对 streak、选项分布，写 SQLite。</span>
+        </div>
+      </div>
+      <div class="mile">
+        <div class="mile-tag">M2</div>
+        <div class="mile-body">
+          <strong>控制台</strong>
+          <span>出题 / 封盘 / 公布 / 跳过 / 手改判定，快捷键与脚踏板，实时判定流，开播自检。</span>
+        </div>
+      </div>
+      <div class="mile">
+        <div class="mile-tag">M3</div>
+        <div class="mile-body">
+          <strong>接官方 <code>OfficialSource</code></strong>
+          <span>资质下来后实现真实的 WebSocket 接入、token 自动刷新、断线重连。若「必问 05」确认大小写不敏感，关键词从 8 个压到 4 个。
+          此时才第一次接触真实弹幕，前面所有逻辑都已在 mock 上验证过。</span>
+        </div>
+      </div>
+      <div class="mile">
+        <div class="mile-tag">M4</div>
+        <div class="mile-body">
+          <strong>试播调优</strong>
+          <span>用「疑似」日志看判定准确率和漏判率，调整题目文案与选项长度，跑通真实的节奏感。</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div>设计稿 v0.2 · 2026-10-01 · 相对 v0.1 的变化：题型锁定四选一、关键词锁定 abcdABCD、接入锁定官方路线、合规范围收窄</div>
+    <div>「必问 01–05」的答案将决定呈现层形态与关键词配额，建议先拿到答案再开工 M1 之后的模块。</div>
+  </footer>
+
+</div>

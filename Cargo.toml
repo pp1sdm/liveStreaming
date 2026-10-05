@@ -1,0 +1,34 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+
+[workspace.dependencies]
+livestream-ai = { path = "crates/ai" }
+livestream-core = { path = "crates/core" }
+livestream-danmaku = { path = "crates/danmaku" }
+livestream-engine = { path = "crates/engine" }
+livestream-web = { path = "crates/web" }
+
+anyhow = "1"
+async-trait = "0.1"
+# 从 .env 读密钥。密钥不进版本库、不进日志、不进对话上下文。
+dotenvy = "0.15"
+axum = "0.8"
+futures = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "signal", "net"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+# 连本地弹幕工具的 WebSocket。默认 feature 就够，不需要 TLS——
+# 转发工具都跑在 127.0.0.1 上。
+tokio-tungstenite = "0.30"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+unicode-normalization = "0.1"
+
+[profile.release]
+lto = "thin"

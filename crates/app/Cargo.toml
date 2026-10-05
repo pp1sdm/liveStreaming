@@ -1,0 +1,27 @@
+[package]
+name = "livestream-app"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "livestream"
+path = "src/main.rs"
+
+[dependencies]
+livestream-ai.workspace = true
+livestream-core.workspace = true
+livestream-danmaku.workspace = true
+livestream-engine.workspace = true
+livestream-web.workspace = true
+
+anyhow.workspace = true
+async-trait.workspace = true
+axum.workspace = true
+dotenvy.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "test-util"] }

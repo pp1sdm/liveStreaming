@@ -1,0 +1,6 @@
+/target
+
+# 密钥。DEEPSEEK_API_KEY 写在这里，绝对不能进版本库。
+# 只留 .env.example 做样例（里面只有占位符，没有真 key）。
+.env
+.env.local
